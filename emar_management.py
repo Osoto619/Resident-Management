@@ -3,17 +3,37 @@ import db_functions
 from datetime import datetime
 
 def add_medication_window():
-    time_slots = ['Morning', 'Noon', 'Evening', 'Night']  # Adjust as needed
-    time_slot_checkboxes = [sg.Checkbox(slot, key=f'TIME_SLOT_{slot}') for slot in time_slots]
-
+    medication_type_options = ['Scheduled', 'As Needed (PRN)']
+    
     layout = [
+        [sg.Text('Medication Type'), sg.Combo(medication_type_options, default_value='Scheduled', key='Medication Type', readonly=True, enable_events=True)],
         [sg.Text('Medication Name'), sg.InputText(key='Medication Name')],
         [sg.Text('Dosage'), sg.InputText(key='Dosage')],
         [sg.Text('Instructions'), sg.InputText(key='Instructions')],
-        [sg.Frame('Time Slots (Select All That Apply)', [time_slot_checkboxes])],
+        [sg.Frame('Time Slots (Select All That Apply)', [[sg.Checkbox(slot, key=f'TIME_SLOT_{slot}') for slot in ['Morning', 'Noon', 'Evening', 'Night']]], key='Time Slots Frame')],
         [sg.Button('Submit'), sg.Button('Cancel')]
     ]
-    return sg.Window('Add Medication', layout)
+
+    window = sg.Window('Add Medication', layout)
+
+    while True:
+        event, values = window.read()
+
+        if event in (sg.WIN_CLOSED, 'Cancel'):
+            break
+        elif event == 'Medication Type':
+            is_prn = values['Medication Type'] == 'As Needed (PRN)'
+            window['Time Slots Frame'].update(visible=not is_prn)
+        elif event == 'Submit':
+            # Handle the submission of the form here
+            break
+           # to refresh 
+            # window.close()
+
+            # window = create_management_window(resident_names, selected_resident, default_tab_index=1)
+
+    window.close()
+
 
 
 def create_medication_entry(medication_name, dosage, instructions, time_slot, administered=''):
@@ -53,26 +73,32 @@ def retrieve_emar_data_from_window(window, resident_name):
 
 
 def get_emar_tab_layout(resident_name):
-    existing_emar_data = db_functions.fetch_emar_data_for_resident(resident_name)
-
-    # Fetch medications for the resident
-    medications_schedule = db_functions.fetch_medications_for_resident(resident_name)
+    # Fetch medications for the resident, including both scheduled and PRN
+    medications_data = db_functions.fetch_medications_for_resident(resident_name)
 
     sections = []
-    for time_slot, medications in medications_schedule.items():
-        section_layout = [create_medication_entry(med_name, med_info['dosage'], med_info['instructions'], time_slot, existing_emar_data.get(med_name, {}).get(time_slot, '')) for med_name, med_info in medications.items()]
+    
+    # Handle Scheduled Medications
+    for time_slot, medications in medications_data['Scheduled'].items():
+        section_layout = [create_medication_entry(med_name, med_info['dosage'], med_info['instructions'], time_slot) for med_name, med_info in medications.items()]
         section_frame = sg.Frame(time_slot, section_layout)
         sections.append([section_frame])
 
-    layout = sections + [[sg.Text('', expand_x=True), sg.Button('Save', key='-EMAR_SAVE-'), sg.Button('Add Medication', key='-ADD_MEDICATION-'), sg.Button("Discontinue Medication"),
-                          sg.Text('', expand_x=True)]]
-    layout.append([sg.Text('', expand_x=True), sg.Button('View/Edit Current Month eMARS Chart', key='CURRENT_EMAR_CHART'), sg.Text('', expand_x=True)])
-    layout.append([sg.Text('', expand_x=True),sg.Text('Or Search by Month and Year'), sg.Text('', expand_x=True)])
-    layout.append([sg.Text(text="", expand_x=True),sg.Text(text="Enter Month: (MM)"), sg.InputText(size=4, key="-EMAR_MONTH-") , sg.Text("Enter Year: (YYYY)"), sg.InputText(size=5, key='-EMAR_YEAR-'), 
-             sg.Button("Search", key='-EMAR_SEARCH-'), sg.Text(text="", expand_x=True)])
+    # Handle PRN Medications
+    if medications_data['PRN']:
+        prn_section_layout = [create_medication_entry(med_name, med_info['dosage'], med_info['instructions'], 'PRN') for med_name, med_info in medications_data['PRN'].items()]
+        prn_section_frame = sg.Frame('As Needed (PRN)', prn_section_layout)
+        sections.append([prn_section_frame])
 
-    return layout
+    # Bottom part of the layout with buttons
+    bottom_layout = [
+        [sg.Text('', expand_x=True), sg.Button('Save', key='-EMAR_SAVE-'), sg.Button('Add Medication', key='-ADD_MEDICATION-'), sg.Button("Discontinue Medication"), sg.Text('', expand_x=True)],
+        [sg.Text('', expand_x=True), sg.Button('View/Edit Current Month eMARS Chart', key='CURRENT_EMAR_CHART'), sg.Text('', expand_x=True)],
+        [sg.Text('', expand_x=True), sg.Text('Or Search by Month and Year'), sg.Text('', expand_x=True)],
+        [sg.Text(text="", expand_x=True), sg.Text(text="Enter Month: (MM)"), sg.InputText(size=4, key="-EMAR_MONTH-"), sg.Text("Enter Year: (YYYY)"), sg.InputText(size=5, key='-EMAR_YEAR-'), sg.Button("Search", key='-EMAR_SEARCH-'), sg.Text(text="", expand_x=True)]
+    ]
 
+    return sections + bottom_layout
 
 
 if __name__ == "__main__":

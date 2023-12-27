@@ -41,6 +41,7 @@ c.execute('''CREATE TABLE IF NOT EXISTS medications (
     medication_name TEXT,
     dosage TEXT,
     instructions TEXT,
+    medication_type TEXT DEFAULT 'Scheduled',
     FOREIGN KEY(resident_id) REFERENCES residents(id))''')
 
 # Create medication_time_slots

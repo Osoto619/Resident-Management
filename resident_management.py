@@ -107,29 +107,7 @@ def main():
                 sg.popup("No eMARs Chart Data Found for the Specified Month and Resident")
         elif event == '-ADD_MEDICATION-':
             add_med_win = emar_management.add_medication_window()
-            add_event, add_values = add_med_win.read()
-            if add_event == 'Submit':
-                medication_name = add_values['Medication Name']
-                dosage = add_values['Dosage']
-                instructions = add_values['Instructions']
-
-                # Retrieve the selected time slots
-                selected_time_slots = []
-                for slot in ['Morning', 'Noon', 'Evening', 'Night']:
-                    if add_values[f'TIME_SLOT_{slot}']:
-                        selected_time_slots.append(slot)
-                # Insert the new medication with the selected time slots
-                db_functions.insert_medication(selected_resident, medication_name, dosage, instructions, selected_time_slots)
-                sg.popup('Medication Saved')
-
-
-                add_med_win.close()
-                window.close()
-
-                window = create_management_window(resident_names, selected_resident, default_tab_index=1)
-
-            elif add_event in (sg.WIN_CLOSED, 'Cancel'):
-                add_med_win.close()
+            
         # Handling 'Next Tab' and 'Previous Tab' button events
         if event in ['Next Tab', 'Previous Tab']:
             if event == 'Next Tab':
@@ -148,4 +126,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

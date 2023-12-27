@@ -42,6 +42,19 @@ def create_medication_section(medication_name, medication_info):
     return section_layout
 
 
+def create_prn_medication_section(medication_name, medication_info):
+    section_layout = []
+    section_layout.append([create_row_label(medication_name)])
+    section_layout.append([create_row_label(f"{medication_info['dosage']}")])
+    section_layout.append([create_row_label(f"{medication_info['instructions']}")])
+
+    # Adding a label to indicate that this is a PRN medication
+    section_layout.append([create_row_label("As Needed (PRN)")])
+
+    section_layout.append(create_horizontal_bar(''))  # End with a horizontal bar
+    return section_layout
+
+
 def show_emar_chart(resident_name, year_month):
     # Define the number of days
     num_days = 31
@@ -61,18 +74,32 @@ def show_emar_chart(resident_name, year_month):
     emar_data = db_functions.fetch_emar_data_for_month(resident_name, year_month)
 
     original_structure = db_functions.fetch_medications_for_resident(resident_name)
+    
+    # Process Scheduled Medications
     new_structure = {}
-    for time_slot, medications in original_structure.items():
+    for time_slot, medications in original_structure['Scheduled'].items():
         for medication_name, details in medications.items():
             if medication_name not in new_structure:
                 new_structure[medication_name] = {
                     'dosage': details['dosage'], 
                     'instructions': details['instructions'],
-                    'time_slots': [time_slot]
-                }
+                    'time_slots': [time_slot],
+                    'type': 'Scheduled'
+            }
             else:
                 new_structure[medication_name]['time_slots'].append(time_slot)
-    print(new_structure)
+    
+    # Process PRN Medications
+    prn_structure = {}
+    for medication_name,details, in original_structure['PRN'].items():
+        print(f'{medication_name} medication name')
+        print(f'{details} details')
+        prn_structure[medication_name] = {
+            'dosage': details['dosage'],
+            'instructions': details['instructions'],
+            'type' : 'PRN'
+
+        }
 
     # Define the layout of the window
     layout = [
@@ -94,8 +121,14 @@ def show_emar_chart(resident_name, year_month):
               hide_vertical_scroll=True)],
         create_horizontal_bar(text='')
     ]
+
+    # Add Scheduled Medications to layout
     for med_name, med_info in new_structure.items():
         layout.extend(create_medication_section(med_name, med_info))
+    
+    # Add PRN Medications to layout
+    for med_name, med_info in prn_structure.items():
+        layout.extend(create_prn_medication_section(med_name, med_info))
 
     layout.append([sg.Button('Save Changes Made'), sg.Button('Hide Buttons')])
     # Create the window

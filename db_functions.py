@@ -72,7 +72,6 @@ def get_resident_id(resident_name):
 
 
 def fetch_medications_for_resident(resident_name):
-    # Connect to the database
     with sqlite3.connect('resident_data.db') as conn:
         cursor = conn.cursor()
 
@@ -80,47 +79,58 @@ def fetch_medications_for_resident(resident_name):
         cursor.execute("SELECT id FROM residents WHERE name = ?", (resident_name,))
         resident_id_result = cursor.fetchone()
         if not resident_id_result:
-            return {}  # No such resident
+            return {}  # No such resident found
         resident_id = resident_id_result[0]
 
-        # Fetch medications and their time slots
+        # Fetch Scheduled Medications
         cursor.execute("""
             SELECT m.medication_name, m.dosage, m.instructions, ts.slot_name
             FROM medications m
             JOIN medication_time_slots mts ON m.id = mts.medication_id
             JOIN time_slots ts ON mts.time_slot_id = ts.id
-            WHERE m.resident_id = ?
+            WHERE m.resident_id = ? AND m.medication_type = 'Scheduled'
         """, (resident_id,))
+        scheduled_results = cursor.fetchall()
 
-        results = cursor.fetchall()
+        scheduled_medications = {}
+        for med_name, dosage, instructions, time_slot in scheduled_results:
+            if time_slot not in scheduled_medications:
+                scheduled_medications[time_slot] = {}
+            scheduled_medications[time_slot][med_name] = {'dosage': dosage, 'instructions': instructions}
 
-    # Organize medications by time slots
-    medications_schedule = {}
-    for med_name, dosage, instructions, time_slot in results:
-        if time_slot not in medications_schedule:
-            medications_schedule[time_slot] = {}
-        medications_schedule[time_slot][med_name] = {'dosage': dosage, 'instructions': instructions}
+        # Fetch PRN Medications
+        cursor.execute("""
+            SELECT medication_name, dosage, instructions
+            FROM medications 
+            WHERE resident_id = ? AND medication_type = 'As Needed (PRN)'
+        """, (resident_id,))
+        prn_results = cursor.fetchall()
 
-    return medications_schedule
+        prn_medications = {med_name: {'dosage': dosage, 'instructions': instructions} for med_name, dosage, instructions in prn_results}
+
+    # Combine the data into a single structure
+    medications_data = {'Scheduled': scheduled_medications, 'PRN': prn_medications}
+    return medications_data
 
 
-def insert_medication(resident_name, medication_name, dosage, instructions, selected_time_slots):
+def insert_medication(resident_name, medication_name, dosage, instructions, medication_type, selected_time_slots):
     resident_id = get_resident_id(resident_name)
-    if resident_id:
+    if resident_id is not None:
         with sqlite3.connect('resident_data.db') as conn:
             cursor = conn.cursor()
-            # Insert medication details
-            cursor.execute('INSERT INTO medications (resident_id, medication_name, dosage, instructions) VALUES (?, ?, ?, ?)',
-                           (resident_id, medication_name, dosage, instructions))
-            medication_id = cursor.lastrowid  # Get the id of the newly inserted medication
 
-            # Insert medication-time slot relations
-            for slot in selected_time_slots:
-                # Get the time slot id from the database
-                cursor.execute('SELECT id FROM time_slots WHERE slot_name = ?', (slot,))
-                slot_id = cursor.fetchone()[0]
-                cursor.execute('INSERT INTO medication_time_slots (medication_id, time_slot_id) VALUES (?, ?)',
-                               (medication_id, slot_id))
+            # Insert medication details
+            cursor.execute('INSERT INTO medications (resident_id, medication_name, dosage, instructions, medication_type) VALUES (?, ?, ?, ?, ?)',
+                           (resident_id, medication_name, dosage, instructions, medication_type))
+            medication_id = cursor.lastrowid
+
+            # If the medication is scheduled, handle time slot relations
+            if medication_type == 'Scheduled':
+                for slot in selected_time_slots:
+                    cursor.execute('SELECT id FROM time_slots WHERE slot_name = ?', (slot,))
+                    slot_id = cursor.fetchone()[0]
+                    cursor.execute('INSERT INTO medication_time_slots (medication_id, time_slot_id) VALUES (?, ?)',
+                                   (medication_id, slot_id))
             
             conn.commit()
 
