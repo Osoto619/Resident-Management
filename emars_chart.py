@@ -92,8 +92,6 @@ def show_emar_chart(resident_name, year_month):
     # Process PRN Medications
     prn_structure = {}
     for medication_name,details, in original_structure['PRN'].items():
-        print(f'{medication_name} medication name')
-        print(f'{details} details')
         prn_structure[medication_name] = {
             'dosage': details['dosage'],
             'instructions': details['instructions'],
@@ -144,14 +142,25 @@ def show_emar_chart(resident_name, year_month):
         emar_data_dict[med_name][date][time_slot] = administered
 
     # If data is found, update the layout fields accordingly
-    for med_name, med_dates in emar_data_dict.items():
-        for date, slots in med_dates.items():
-            day = int(date.split('-')[2])  # Extract the day from 'YYYY-MM-DD'
-            for time_slot, administered in slots.items():
-                key = f'-{med_name}_{time_slot}-{day}-'
-                if window[key]:
-                    window[key].update(administered)
+    for med_name, med_info in new_structure.items():
+        if med_info['type'] == 'Scheduled':
+            # Handle scheduled medications
+            for date, slots in emar_data_dict.get(med_name, {}).items():
+                day = int(date.split('-')[2])  # Extract the day from 'YYYY-MM-DD'
+                for time_slot, administered in slots.items():
+                    key = f'-{med_name}_{time_slot}-{day}-'
+                    if window[key]:
+                        window[key].update(administered)
 
+        elif med_info['type'] == 'PRN':
+            # Handle PRN medications
+            # You might want to list all administered instances in a single field or a different format
+            # Example: creating a key for PRN medications
+            prn_key = f'-PRN_{med_name}-'
+            administered_list = [administered for date, slots in emar_data_dict.get(med_name, {}).items() for administered in slots.values()]
+            administered_text = ', '.join(administered_list)
+            if window[prn_key]:
+                window[prn_key].update(administered_text)
 
     # Event Loop
     while True:

@@ -64,7 +64,7 @@ def main():
             sg.popup("Data saved successfully!")
         elif event == '-EMAR_SAVE-':
             emar_data = emar_management.retrieve_emar_data_from_window(window,selected_resident)
-            print(emar_data) # Testing
+            
             db_functions.save_emar_data_from_management_window(emar_data)
             sg.popup("eMAR data saved successfully!")
         elif event == '-CURRENT_ADL_CHART-':
@@ -106,8 +106,13 @@ def main():
             else:
                 sg.popup("No eMARs Chart Data Found for the Specified Month and Resident")
         elif event == '-ADD_MEDICATION-':
-            add_med_win = emar_management.add_medication_window()
-            
+            window.close()
+            add_med_win = emar_management.add_medication_window(selected_resident)
+            window = create_management_window(resident_names,selected_resident)
+        elif event.startswith('-ADMIN_'):
+            medication_name = event.split('_')[-1]
+            medication_name = medication_name[:-1]
+            emar_management.open_administer_window(selected_resident, medication_name)
         # Handling 'Next Tab' and 'Previous Tab' button events
         if event in ['Next Tab', 'Previous Tab']:
             if event == 'Next Tab':

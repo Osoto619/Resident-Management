@@ -6,7 +6,7 @@ def get_user_theme():
         cursor = conn.cursor()
         cursor.execute("SELECT setting_value FROM user_settings WHERE setting_name = 'theme'")
         result = cursor.fetchone()
-        return result[0] if result else 'DarkBlue'  # Replace 'DarkBlue' with your default theme
+        return result[0] if result else 'Reddit'  # Replace 'DarkBlue' with your default theme
 
 
 # Function to save theme choice
@@ -277,6 +277,26 @@ def save_adl_data_from_chart_window(resident_name, year_month, window_values):
             cursor.execute(sql, (resident_name, date_str, *adl_data))
             
         # Commit the changes to the database
+        conn.commit()
+
+
+def save_prn_administration_data(resident_name, medication_name, admin_data):
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+
+        # Retrieve resident ID and medication ID
+        cursor.execute("SELECT id FROM residents WHERE name = ?", (resident_name,))
+        resident_id = cursor.fetchone()[0]
+
+        cursor.execute("SELECT id FROM medications WHERE medication_name = ? AND resident_id = ?", (medication_name, resident_id))
+        medication_id = cursor.fetchone()[0]
+
+        # Insert administration data into emar_chart
+        cursor.execute('''
+            INSERT INTO emar_chart (resident_id, medication_id, date, administered, notes)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (resident_id, medication_id, admin_data['datetime'], admin_data['initials'], admin_data['notes']))
+
         conn.commit()
 
 

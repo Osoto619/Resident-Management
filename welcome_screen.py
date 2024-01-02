@@ -60,6 +60,7 @@ c.execute('''CREATE TABLE IF NOT EXISTS emar_chart (
     date TEXT,
     time_slot TEXT,
     administered TEXT,
+    notes TEXT DEFAULT '',
     FOREIGN KEY(resident_id) REFERENCES residents(id),
     FOREIGN KEY(medication_id) REFERENCES medications(id),
     UNIQUE(resident_id, medication_id, date, time_slot))''')
@@ -236,15 +237,18 @@ def display_welcome_window(num_of_residents_local):
         elif event == 'Add Resident':
             window.close()
             enter_resident_info()
-            break
+            display_welcome_window(db_functions.get_resident_count())
+            
         elif event == 'Remove Resident':
+            window.close()
             enter_resident_removal()
+            display_welcome_window(db_functions.get_resident_count())
         elif event == 'Enter Resident Management':
             if db_functions.get_resident_count() == 0:
                 sg.popup("Your Facility Has No Residents. Please Select Click Add Resident.")
                 continue
             else:
-                window.hide()  # Hide the welcome window
+                window.hide()
                 resident_management.main()
                 window.un_hide()
                 

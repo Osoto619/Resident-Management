@@ -74,7 +74,13 @@ def get_adl_tab_layout(resident_name):
     # Append the activities frame to the tab layout
     tab_layout.append([sg.Text(text='', expand_x=True), activities_frame, sg.Text(text='', expand_x=True)])
 
-    return tab_layout
+    # Create a scrollable container for the layout
+    scrollable_layout = sg.Column(tab_layout, size=(680,600)) # Adjust the size as needed
+
+
+    # return tab_layout
+    # Return the layout wrapped in a scrollable container
+    return [[scrollable_layout]]
 
 
 def create_activities_frame():
