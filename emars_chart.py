@@ -30,12 +30,12 @@ def create_input_text(key):
 
 def create_medication_section(medication_name, medication_info):
     section_layout = []
-    section_layout.append([create_row_label(medication_name)])
-    section_layout.append([create_row_label(f"{medication_info['dosage']}")])
-    section_layout.append([create_row_label(f"{medication_info['instructions']}")])
+    section_layout.append(create_row_label(medication_name))
+    section_layout.append(create_row_label(f"{medication_info['dosage']}"))
+    section_layout.append(create_row_label(f"{medication_info['instructions']}"))
 
     for time_slot in medication_info['time_slots']:
-        row = [create_row_label(time_slot)  + [sg.Text(' '* spacer_width)] + create_input_text(f"{medication_name}_{time_slot}")]
+        row = create_row_label(time_slot)  + [sg.Text(' '* spacer_width)] + create_input_text(f"{medication_name}_{time_slot}")
         section_layout.append(row)
 
     section_layout.append(create_horizontal_bar(''))  # End with a horizontal bar
@@ -44,12 +44,12 @@ def create_medication_section(medication_name, medication_info):
 
 def create_prn_medication_section(medication_name, medication_info):
     section_layout = []
-    section_layout.append([create_row_label(medication_name)])
-    section_layout.append([create_row_label(f"{medication_info['dosage']}")])
-    section_layout.append([create_row_label(f"{medication_info['instructions']}")])
+    section_layout.append(create_row_label(medication_name))
+    section_layout.append(create_row_label(f"{medication_info['dosage']}"))
+    section_layout.append(create_row_label(f"{medication_info['instructions']}"))
 
     # Adding a label to indicate that this is a PRN medication
-    section_layout.append([create_row_label("As Needed (PRN)")])
+    section_layout.append(create_row_label("As Needed (PRN)"))
 
     section_layout.append(create_horizontal_bar(''))  # End with a horizontal bar
     return section_layout
@@ -60,7 +60,7 @@ def show_emar_chart(resident_name, year_month):
     num_days = 31
 
     # Define the width of the label cell and regular cells
-    label_cell_width = 20  # This may need to be adjusted to align perfectly
+    label_cell_width = 21  # This may need to be adjusted to align perfectly
     regular_cell_width = 5  # This may need to be adjusted to align perfectly
 
     # Empty row for the table to just show headers
@@ -99,6 +99,14 @@ def show_emar_chart(resident_name, year_month):
 
         }
 
+
+    # Medication layout
+    medication_layout = []
+    for med_name, med_info in new_structure.items():
+        medication_layout.extend(create_medication_section(med_name, med_info))
+    for med_name, med_info in prn_structure.items():
+        medication_layout.extend(create_prn_medication_section(med_name, med_info))
+
     # Define the layout of the window
     layout = [
         [sg.Text('CareTech Monthly eMAR Chart', font=('Helvetica', 16), justification='center', expand_x=True)],
@@ -117,16 +125,17 @@ def show_emar_chart(resident_name, year_month):
               row_height=25,
               pad=(0,0),
               hide_vertical_scroll=True)],
-        create_horizontal_bar(text='')
+        create_horizontal_bar(text=''),
+        [sg.Column(medication_layout, scrollable=True, vertical_scroll_only=True, size=(1600, 750))]
     ]
 
-    # Add Scheduled Medications to layout
-    for med_name, med_info in new_structure.items():
-        layout.extend(create_medication_section(med_name, med_info))
+    # # Add Scheduled Medications to layout
+    # for med_name, med_info in new_structure.items():
+    #     layout.extend(create_medication_section(med_name, med_info))
     
-    # Add PRN Medications to layout
-    for med_name, med_info in prn_structure.items():
-        layout.extend(create_prn_medication_section(med_name, med_info))
+    # # Add PRN Medications to layout
+    # for med_name, med_info in prn_structure.items():
+    #     layout.extend(create_prn_medication_section(med_name, med_info))
 
     layout.append([sg.Button('Save Changes Made'), sg.Button('Hide Buttons')])
     # Create the window
