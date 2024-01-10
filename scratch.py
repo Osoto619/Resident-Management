@@ -4,7 +4,6 @@ import calendar
 import datetime
 import db_functions
 
-
 # Define the width of the label cell and regular cells
 label_cell_width = 12  # This may need to be adjusted to align perfectly
 regular_cell_width = 5  # This may need to be adjusted to align perfectly
@@ -15,41 +14,81 @@ spacer_width = 3  # Adjust as needed
 # Define the number of days
 num_days = 31
 
+# Pagination settings
+MEDS_PER_PAGE = 5
+
+def calculate_total_pages(medications):
+    return (len(medications) + MEDS_PER_PAGE - 1) // MEDS_PER_PAGE
+
+
+def update_page_layout(window, container_key, medications, page_number):
+    new_meds_layout = []  # Create a new layout list for the medications
+    start_index = page_number * MEDS_PER_PAGE
+    end_index = min(start_index + MEDS_PER_PAGE, len(medications))
+
+    for med_name in list(medications.keys())[start_index:end_index]:
+        med_info = medications[med_name]
+        if med_info['type'] == 'Scheduled':
+            medication_section = create_medication_section(med_name, med_info)
+        elif med_info['type'] == 'PRN':
+            medication_section = create_prn_medication_section(med_name, med_info)
+
+        for row in medication_section:
+            new_meds_layout.append(row)
+
+    # Update the content of the existing Column
+    window[container_key].update(new_meds_layout)
+
+
+# Function to create the initial meds layout for the first page
+def create_initial_meds_layout(medications):
+    meds_layout = []
+    for med_name in list(medications.keys())[:MEDS_PER_PAGE]:
+        med_info = medications[med_name]
+        if med_info['type'] == 'Scheduled':
+            medication_section = create_medication_section(med_name, med_info)
+        elif med_info['type'] == 'PRN':
+            medication_section = create_prn_medication_section(med_name, med_info)
+        for row in medication_section:
+            meds_layout.append(row)
+    return meds_layout
+
 
 def create_horizontal_bar(text):
     return [sg.Text(f'{text}', justification='center', expand_x=True, relief=sg.RELIEF_SUNKEN)]
 
-
 def create_row_label(text):
     return [sg.Text(f'{text}', size=(label_cell_width+7, 1), pad=(0,0), justification='center')]
-
 
 def create_input_text(key):
     return [sg.InputText(size=(regular_cell_width, 1), pad=(3, 3), justification='center', key=f'-{key}-{i}-') for i in range(1, num_days + 1)]
 
-
 def create_medication_section(medication_name, medication_info):
     section_layout = []
-    section_layout.append([create_row_label(medication_name)])
-    section_layout.append([create_row_label(f"{medication_info['dosage']}")])
-    section_layout.append([create_row_label(f"{medication_info['instructions']}")])
+    section_layout.append(create_row_label(medication_name))
+    section_layout.append(create_row_label(f"{medication_info['dosage']}"))
+    section_layout.append(create_row_label(f"{medication_info['instructions']}"))
 
     for time_slot in medication_info['time_slots']:
-        row = [create_row_label(time_slot)  + [sg.Text(' '* spacer_width)] + create_input_text(f"{medication_name}_{time_slot}")]
+        row = create_row_label(time_slot)  + [sg.Text(' '* spacer_width)] + create_input_text(f"{medication_name}_{time_slot}")
         section_layout.append(row)
 
     section_layout.append(create_horizontal_bar(''))  # End with a horizontal bar
     return section_layout
 
+def create_prn_medication_section(medication_name, medication_info):
+    section_layout = []
+    section_layout.append([create_row_label(medication_name)])
+    section_layout.append([create_row_label(f"{medication_info['dosage']}")])
+    section_layout.append([create_row_label(f"{medication_info['instructions']}")])
+
+    # Adding a label to indicate that this is a PRN medication
+    section_layout.append([create_row_label("As Needed (PRN)")])
+
+    section_layout.append(create_horizontal_bar(''))  # End with a horizontal bar
+    return section_layout
 
 def show_emar_chart(resident_name, year_month):
-    # Define the number of days
-    num_days = 31
-
-    # Define the width of the label cell and regular cells
-    label_cell_width = 20  # This may need to be adjusted to align perfectly
-    regular_cell_width = 5  # This may need to be adjusted to align perfectly
-
     # Empty row for the table to just show headers
     data = [[]]  # No data rows, only headers
 
@@ -57,23 +96,38 @@ def show_emar_chart(resident_name, year_month):
     year, month_number = year_month.split('-')
     month_name = calendar.month_name[int(month_number)]
 
-    # Fetch medication data (mocked for example)
-    # Updated medication data
-    medication_data = {
-    'Medication A': {
-        'dosage': '10mg', 
-        'instructions': '',
-        'time_slots': ['Morning', 'Evening']
-    },
-    'AveryLongfuckingName': {
-        'dosage': '5mg', 
-        'instructions': 'Hold if BS > 200 dskadmla',
-        'time_slots': ['Noon']
-    },
-    # ... other medications
-}
+    # Fetch eMAR data for the month
+    emar_data = db_functions.fetch_emar_data_for_month(resident_name, year_month)
 
-    # Define the layout of the window
+    original_structure = db_functions.fetch_medications_for_resident(resident_name)
+    
+    # Process Scheduled Medications
+    new_structure = {}
+    for time_slot, medications in original_structure['Scheduled'].items():
+        for medication_name, details in medications.items():
+            if medication_name not in new_structure:
+                new_structure[medication_name] = {
+                    'dosage': details['dosage'], 
+                    'instructions': details['instructions'],
+                    'time_slots': [time_slot],
+                    'type': 'Scheduled'
+            }
+            else:
+                new_structure[medication_name]['time_slots'].append(time_slot)
+    
+    # Process PRN Medications
+    prn_structure = {}
+    for medication_name,details, in original_structure['PRN'].items():
+        prn_structure[medication_name] = {
+            'dosage': details['dosage'],
+            'instructions': details['instructions'],
+            'type' : 'PRN'
+        }
+
+    # Define the initial content of meds_container
+    initial_meds_layout = create_initial_meds_layout(new_structure)
+    meds_container = sg.Column(initial_meds_layout, key='-MEDS-')
+
     layout = [
         [sg.Text('CareTech Monthly eMAR Chart', font=('Helvetica', 16), justification='center', expand_x=True)],
         [sg.Text('RESIDENT:', size=(10, 1)), sg.Text(f'{resident_name}', key='-RESIDENT-', size=(20, 1)),
@@ -91,28 +145,51 @@ def show_emar_chart(resident_name, year_month):
               row_height=25,
               pad=(0,0),
               hide_vertical_scroll=True)],
-        create_horizontal_bar(text='')
+        create_horizontal_bar(text=''),
+        [meds_container],
+        [sg.Button('Previous', key='-PREV-'), sg.Text(f'Page 1 of {calculate_total_pages(new_structure)}', key='-PAGE-'), sg.Button('Next', key='-NEXT-')],
+        [sg.Button('Save Changes Made'), sg.Button('Hide Buttons')]
     ]
-    for med_name, med_info in medication_data.items():
-        layout.extend(create_medication_section(med_name, med_info))
-
 
     # Create the window
-    window = sg.Window(' CareTech Monthly eMARS', layout, finalize=True, resizable=True)
+    window = sg.Window('CareTech Monthly eMARS', layout, finalize=True, resizable=True)
 
-    # adl_data = fetch_adl_chart_data_for_month(resident_name, year_month) -- change for emar
+    # Initial update for page 1
+    current_page = 0
+    update_page_layout(window, '-MEDS-', new_structure, current_page)
 
-    # If data is found, update the layout fields accordingly
-    
+    # Convert the eMAR data into a more convenient structure
+    emar_data_dict = {}
+    for med_name, date, time_slot, administered in emar_data:
+        if med_name not in emar_data_dict:
+            emar_data_dict[med_name] = {}
+        if date not in emar_data_dict[med_name]:
+            emar_data_dict[med_name][date] = {}
+        emar_data_dict[med_name][date][time_slot] = administered
+
+    total_pages = calculate_total_pages(new_structure)
+
     # Event Loop
     while True:
         event, values = window.read()
         if event == sg.WIN_CLOSED:
             break
-        
+        elif event == '-NEXT-' and current_page < total_pages - 1:
+            current_page += 1
+            update_page_layout(window, '-MEDS-', new_structure, current_page)
+            window['-PAGE-'].update(f'Page {current_page + 1} of {total_pages}')
+        elif event == '-PREV-' and current_page > 0:
+            current_page -= 1
+            update_page_layout(window, '-MEDS-', new_structure, current_page)
+            window['-PAGE-'].update(f'Page {current_page + 1} of {total_pages}')
+        elif event == 'Hide Buttons':
+            window['Save Changes Made'].update(visible=False)
+            window['Hide Buttons'].update(visible=False)
+        elif event == 'Save Changes Made':
+            db_functions.save_emar_data_from_chart_window(resident_name,year_month,values)
+            sg.popup("Changes Have Been Saved")
 
     window.close()
 
-
 if __name__ == "__main__":
-    show_emar_chart("Rosa Soto", "2023-12")
+    show_emar_chart("Snoop Dawg", "2023-12")

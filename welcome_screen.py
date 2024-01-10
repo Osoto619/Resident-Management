@@ -3,7 +3,7 @@ import PySimpleGUI as sg
 import adl_management
 import resident_management
 import db_functions
-         
+from datetime import datetime, timedelta
 
 # Connect to SQLite database
 # The database file will be 'resident_data.db'
@@ -16,13 +16,12 @@ c.execute('''CREATE TABLE IF NOT EXISTS user_settings (
     setting_name TEXT UNIQUE,
     setting_value TEXT)''')
 
-# Create  Resident table
+# Create Resident table
 c.execute('''CREATE TABLE IF NOT EXISTS residents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT,
-    age INTEGER,
-    additional_info TEXT,
-    self_care INTEGER)''')
+    date_of_birth TEXT,
+    level_of_care TEXT)''')
 
 # Create Time Slots table
 c.execute('''CREATE TABLE IF NOT EXISTS time_slots (
@@ -109,33 +108,47 @@ def apply_user_theme():
 # Apply user theme at application startup
 apply_user_theme()
 
+# sg.set_options(font=('Helvetica', 11))
+FONT = 'Helvetica'
+FONT_BOLD = 'Arial Bold'
 
 def enter_resident_info():
+    # Calculate the default date (85 years ago from today)
+    past = datetime.now() - timedelta(days=85*365)
+    
     """ Display GUI for entering resident information. """
     layout = [
-        [sg.Text('Please Enter Resident Information')],
-        [sg.Text('Name', size=(15, 1)), sg.InputText(key='Name')],
-        [sg.Text('Age', size=(15, 1)), sg.InputText(key='Age')],
-        [sg.Text('Additional Info', size=(15, 1)), sg.InputText(key='Additional_Info')],
-        [sg.Checkbox('Supervisory Level of Care', key='Self_Care')],
-        [sg.Submit(), sg.Cancel()]
-    ]
+    [sg.Text('Please Enter Resident Information', justification='center', expand_x=True, font=(FONT, 18))],
+    [sg.Text('Name', size=(15, 1), font=(FONT, 12)), sg.InputText(key='Name', size=(20,1))],
+    [sg.Text('Date of Birth', size=(15, 1), font=(FONT, 12)), 
+     sg.InputText(key='Date_of_Birth', size=(20,1), disabled=True), 
+     sg.CalendarButton('Choose Date', target='Date_of_Birth', 
+                       default_date_m_d_y=(past.month, past.day, past.year), 
+                       format='%Y-%m-%d', font=(FONT, 12))],
+    [sg.Text('Level of Care', justification='center', expand_x=True, font=(FONT, 15))],
+    [sg.Radio('Supervisory Care', "RADIO1", default=True, key='Supervisory_Care', size=(15,1), font=(FONT, 12)), 
+     sg.Radio('Personal Care', "RADIO1", key='Personal_Care', size=(15,1), font=(FONT, 12)), 
+     sg.Radio('Directed Care', "RADIO1", key='Directed_Care', size=(15,1), font=(FONT, 12))],
+    [sg.Text('', expand_x=True), sg.Submit(font=('Default', 12)), sg.Cancel(font=(FONT, 12)), sg.Text('', expand_x=True)]
+]
+
 
     window = sg.Window('Enter Resident Info', layout)
 
     while True:
         event, values = window.read()
         if event in (None, 'Cancel'):
-            display_welcome_window(db_functions.get_resident_count())
             break
         elif event == 'Submit':
-            db_functions.insert_resident(values['Name'], values['Age'], values['Additional_Info'], values['Self_Care'])
+             # Determine the selected level of care
+            level_of_care = 'Supervisory Care' if values['Supervisory_Care'] else 'Personal Care' if values['Personal_Care'] else 'Directed Care'
+            db_functions.insert_resident(values['Name'].title(), values['Date_of_Birth'], level_of_care)
             sg.popup('Resident information saved!')
             window.close()
             return True
 
     window.close()
-    return False
+    
 
 
 def fetch_residents():
@@ -152,10 +165,10 @@ def enter_resident_removal():
 
     # Define the layout for the removal window
     layout = [
-        [sg.Text('Warning: Removing a resident is irreversible.', text_color='red')],
-        [sg.Text('Please ensure you have saved any required data before proceeding.')],
-        [sg.Text('Select a resident to remove:'), sg.Combo(residents, key='-RESIDENT-')],
-        [sg.Button('Remove Resident'), sg.Button('Cancel')]
+        [sg.Text('Warning: Removing a resident is irreversible.', text_color='red', font=(FONT_BOLD, 16))],
+        [sg.Text('Please ensure you have saved any required data before proceeding.', font=(FONT, 12))],
+        [sg.Text('Select a resident to remove:', font=(FONT, 12)), sg.Combo(residents, key='-RESIDENT-', font=(FONT, 12))],
+        [sg.Button('Remove Resident', font=(FONT, 12)), sg.Button('Cancel', font=(FONT, 12))]
     ]
 
     # Create the removal window
@@ -218,14 +231,14 @@ def display_welcome_window(num_of_residents_local):
 
     image_path = 'ct-logo.png'
     layout = [
-        [sg.Text(f'Welcome to CareTech Resident Manager', font=("Helvetica", 16),
-                 justification='center')],
+        [sg.Text(f'CareTech Resident Manager', font=("Helvetica", 20),
+                 justification='center', pad=(20,20))],
         [sg.Image(image_path)],
         [sg.Text(f'Your Facility Currently has {num_of_residents_local} Resident(s)',
-                 font=("Helvetica", 14), justification='center')],
-        [sg.Button('Enter Resident Management'),
-         sg.Button('Add Resident', button_color='green'), sg.Button('Remove Resident', button_color='red')], 
-         [sg.Text(text='', expand_x=True), sg.Button("Change Theme"), sg.Text(text='', expand_x=True)]
+                 font=("Helvetica", 16), justification='center', pad=(10,10))],
+        [sg.Text(text='', expand_x=True), sg.Button('Enter Resident Management', pad=6, font=('Helvetica', 12)),
+          sg.Button("Change Theme", pad=6, font=('Helvetica', 12)), sg.Text(text='', expand_x=True)],
+         [sg.Button('Add Resident', button_color='green', pad=6, font=('Helvetica', 12)), sg.Button('Remove Resident', button_color='red', pad=6, font=('Helvetica', 12))]
     ]
 
     window = sg.Window('CareTech Resident Manager', layout, element_justification='c')

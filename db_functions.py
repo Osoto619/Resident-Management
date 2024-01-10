@@ -45,13 +45,13 @@ def get_resident_names():
         return [name[0] for name in residents]
 
 
-def insert_resident(name, age, additional_info, self_care):
+def insert_resident(name, date_of_birth, level_of_care):
     """ Insert a new resident into the database. """
     with sqlite3.connect('resident_data.db') as conn:
         cursor = conn.cursor()
-        # Only specify the columns you are inserting data into
-        cursor.execute('INSERT INTO residents (name, age, additional_info, self_care) VALUES (?, ?, ?, ?)', 
-                       (name, age, additional_info, self_care))
+        # Adjusted SQL query to match the new table structure
+        cursor.execute('INSERT INTO residents (name, date_of_birth, level_of_care) VALUES (?, ?, ?)', 
+                       (name, date_of_birth, level_of_care))
         conn.commit()
 
 

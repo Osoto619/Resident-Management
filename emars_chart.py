@@ -35,7 +35,7 @@ def create_medication_section(medication_name, medication_info):
     section_layout.append(create_row_label(f"{medication_info['instructions']}"))
 
     for time_slot in medication_info['time_slots']:
-        row = create_row_label(time_slot)  + [sg.Text(' '* spacer_width)] + create_input_text(f"{medication_name}_{time_slot}")
+        row = create_row_label(time_slot)  + [sg.Text('      ')] + create_input_text(f"{medication_name}_{time_slot}")
         section_layout.append(row)
 
     section_layout.append(create_horizontal_bar(''))  # End with a horizontal bar
@@ -60,7 +60,7 @@ def show_emar_chart(resident_name, year_month):
     num_days = 31
 
     # Define the width of the label cell and regular cells
-    label_cell_width = 21  # This may need to be adjusted to align perfectly
+    label_cell_width = 22  # This may need to be adjusted to align perfectly
     regular_cell_width = 5  # This may need to be adjusted to align perfectly
 
     # Empty row for the table to just show headers

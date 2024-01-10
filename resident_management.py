@@ -1,16 +1,18 @@
 import PySimpleGUI as sg
 import adl_management
 import emar_management
+import info_management
 import db_functions
 from datetime import datetime
 from adl_chart import show_adl_chart
 from emars_chart import show_emar_chart
+import welcome_screen
 
 
 def create_tab_layout(resident_name):
     adl_tab_layout = adl_management.get_adl_tab_layout(resident_name)
     emar_tab_layout = emar_management.get_emar_tab_layout(resident_name)
-    resident_info_layout = [[sg.Text('Resident Info Content Placeholder')]]
+    resident_info_layout = [[sg.Button(button_text='Enter Resident Info Window', key='-INFO_WINDOW-')]]
 
     adl_tab = sg.Tab('ADL', adl_tab_layout)
     emar_tab = sg.Tab('eMAR', emar_tab_layout)
@@ -20,19 +22,19 @@ def create_tab_layout(resident_name):
 
 
 def create_management_window(resident_names, selected_resident, default_tab_index=0):
-    resident_selector = sg.Combo(resident_names, default_value=selected_resident, key='-RESIDENT-', readonly=True, enable_events=True)
+    resident_selector = sg.Combo(resident_names, default_value=selected_resident, key='-RESIDENT-', readonly=True, enable_events=True, font=('Helvetica', 11))
 
     tabs = create_tab_layout(selected_resident)
-    tab_group = sg.TabGroup([tabs], key='-TABGROUP-')
+    tab_group = sg.TabGroup([tabs], key='-TABGROUP-', font=(welcome_screen.FONT, 11))
 
     current_date = datetime.now().strftime("%m-%d-%y")  # Get today's date
 
     layout = [
-        [sg.Text('CareTech Resident Management', font=('Helvetica', 16), justification='center', expand_x=True)],
-        [sg.Text(text='', expand_x=True), sg.Text(current_date, key='-DATE-', font=('Helvetica', 12)), sg.Text('' ,key='-TIME-', font=('Helvetica', 12)), sg.Text(text='', expand_x=True)],
-        [sg.Text('Select Resident:'), resident_selector],
+        [sg.Text('CareTech Resident Management', font=(welcome_screen.FONT, 18), justification='center', expand_x=True, pad=((0, 0),(20,0)))],
+        [sg.Text(text='', expand_x=True), sg.Text(current_date, key='-DATE-', font=(welcome_screen.FONT, 13)), sg.Text('' ,key='-TIME-', font=(welcome_screen.FONT, 13)), sg.Text(text='', expand_x=True)],
+        [sg.Text('Select Resident:', font=(welcome_screen.FONT, 11)), resident_selector],
         [tab_group],
-        [sg.Text('', expand_x=True), sg.Button('Next Tab'), sg.Button('Previous Tab'), sg.Text('', expand_x=True)]
+        [sg.Text('', expand_x=True), sg.Column(layout=[[sg.Button('Next Tab', font=(welcome_screen.FONT, 11)), sg.Button('Previous Tab', font=(welcome_screen.FONT, 11), pad=10)]]), sg.Text('', expand_x=True)]
     ]
 
     window = sg.Window('CareTech Resident Management', layout, finalize=True)
@@ -108,11 +110,15 @@ def main():
         elif event == '-ADD_MEDICATION-':
             window.close()
             add_med_win = emar_management.add_medication_window(selected_resident)
-            window = create_management_window(resident_names,selected_resident)
+            window = create_management_window(resident_names,selected_resident, default_tab_index=1)
         elif event.startswith('-ADMIN_'):
             medication_name = event.split('_')[-1]
             medication_name = medication_name[:-1]
             emar_management.open_administer_window(selected_resident, medication_name)
+        elif event == '-INFO_WINDOW-':
+            window.hide()
+            info_management.open_resident_info_window(selected_resident)
+            window.un_hide()
         # Handling 'Next Tab' and 'Previous Tab' button events
         if event in ['Next Tab', 'Previous Tab']:
             if event == 'Next Tab':
