@@ -4,6 +4,7 @@ import adl_management
 import resident_management
 import db_functions
 from datetime import datetime, timedelta
+from tkinter import font
 
 # Connect to SQLite database
 # The database file will be 'resident_data.db'
@@ -108,8 +109,7 @@ def apply_user_theme():
 # Apply user theme at application startup
 apply_user_theme()
 
-# sg.set_options(font=('Helvetica', 11))
-FONT = 'Helvetica'
+FONT = db_functions.get_user_font()
 FONT_BOLD = 'Arial Bold'
 
 def enter_resident_info():
@@ -119,9 +119,9 @@ def enter_resident_info():
     """ Display GUI for entering resident information. """
     layout = [
     [sg.Text('Please Enter Resident Information', justification='center', expand_x=True, font=(FONT, 18))],
-    [sg.Text('Name', size=(15, 1), font=(FONT, 12)), sg.InputText(key='Name', size=(20,1))],
+    [sg.Text('Name', size=(15, 1), font=(FONT, 12)), sg.InputText(key='Name', size=(20,1), font=(FONT, 12))],
     [sg.Text('Date of Birth', size=(15, 1), font=(FONT, 12)), 
-     sg.InputText(key='Date_of_Birth', size=(20,1), disabled=True), 
+     sg.InputText(key='Date_of_Birth', size=(20,1), disabled=True, font=(FONT, 12)), 
      sg.CalendarButton('Choose Date', target='Date_of_Birth', 
                        default_date_m_d_y=(past.month, past.day, past.year), 
                        format='%Y-%m-%d', font=(FONT, 12))],
@@ -129,7 +129,7 @@ def enter_resident_info():
     [sg.Radio('Supervisory Care', "RADIO1", default=True, key='Supervisory_Care', size=(15,1), font=(FONT, 12)), 
      sg.Radio('Personal Care', "RADIO1", key='Personal_Care', size=(15,1), font=(FONT, 12)), 
      sg.Radio('Directed Care', "RADIO1", key='Directed_Care', size=(15,1), font=(FONT, 12))],
-    [sg.Text('', expand_x=True), sg.Submit(font=('Default', 12)), sg.Cancel(font=(FONT, 12)), sg.Text('', expand_x=True)]
+    [sg.Text('', expand_x=True), sg.Submit(font=(FONT, 12)), sg.Cancel(font=(FONT, 12)), sg.Text('', expand_x=True)]
 ]
 
 
@@ -149,7 +149,6 @@ def enter_resident_info():
 
     window.close()
     
-
 
 def fetch_residents():
     """ Fetches a list of resident names from the database. """
@@ -194,14 +193,30 @@ def enter_resident_removal():
 
 
 def change_theme_window():
+    global FONT
     # Define the theme options available
     theme_options = sg.theme_list()
 
-    # Layout for the theme selection window
+    # Define the font options available
+    symbol_fonts = [
+    'Webdings', 'Wingdings', 'Wingdings 2', 'Wingdings 3', 'Symbol', 
+    'MS Outlook', 'Bookshelf Symbol 7', 'MT Extra', 
+    'HoloLens MDL2 Assets', 'Segoe MDL2 Assets', 'Segoe UI Emoji', 
+    'Segoe UI Symbol', 'Marlett', 'Cambria Math'
+    # Add any other symbol fonts you want to exclude
+    ]
+
+    font_options = [f for f in font.families() if f not in symbol_fonts]
+    # print(font_options)
+    
     layout = [
-        [sg.Text('Select Theme')],
-        [sg.Combo(theme_options, default_value=sg.theme(), key='-THEME-', readonly=True)],
-        [sg.Button('Ok'), sg.Button('Cancel')]
+        [sg.Text(text= 'Select Theme Colors:', font=(FONT, 20))],
+        [sg.Combo(theme_options, default_value=sg.theme(), key='-THEME-', readonly=True, font=(FONT, 12))],
+        [sg.Text(text='Select Font:', font=(FONT,20))],
+        [sg.Combo(font_options, default_value=db_functions.get_user_font(), key='-FONT_CHOICE-', font=(FONT, 12))],
+        [sg.Text(text='', expand_x=True), sg.Button(button_text= 'Ok', font=(FONT, 15), pad= ((10,10), (12,0))), 
+         sg.Button(button_text='Cancel', font=(FONT, 15), pad= ((10,10), (12,0))),
+         sg.Text(text='', expand_x=True)]
     ]
 
     # Create the theme selection window
@@ -218,6 +233,11 @@ def change_theme_window():
             selected_theme = values['-THEME-']
             sg.theme(values['-THEME-'])
             db_functions.save_user_theme_choice(selected_theme)
+
+            selected_font = values['-FONT_CHOICE-']
+            db_functions.save_user_font_choice(selected_font)
+            FONT = db_functions.get_user_font()
+
             theme_window.close()
             display_welcome_window(db_functions.get_resident_count())
             break
@@ -228,17 +248,16 @@ def change_theme_window():
 def display_welcome_window(num_of_residents_local):
     """ Display a welcome window with the number of residents. """
     
-
     image_path = 'ct-logo.png'
     layout = [
-        [sg.Text(f'CareTech Resident Manager', font=("Helvetica", 20),
+        [sg.Text(f'CareTech Resident Manager', font=(db_functions.get_user_font(), 20),
                  justification='center', pad=(20,20))],
         [sg.Image(image_path)],
         [sg.Text(f'Your Facility Currently has {num_of_residents_local} Resident(s)',
-                 font=("Helvetica", 16), justification='center', pad=(10,10))],
-        [sg.Text(text='', expand_x=True), sg.Button('Enter Resident Management', pad=6, font=('Helvetica', 12)),
-          sg.Button("Change Theme", pad=6, font=('Helvetica', 12)), sg.Text(text='', expand_x=True)],
-         [sg.Button('Add Resident', button_color='green', pad=6, font=('Helvetica', 12)), sg.Button('Remove Resident', button_color='red', pad=6, font=('Helvetica', 12))]
+                 font=(FONT, 16), justification='center', pad=(10,10))],
+        [sg.Text(text='', expand_x=True), sg.Button('Enter Resident Management', pad=6, font=(FONT, 12)),
+          sg.Button("Change Theme", pad=6, font=(FONT, 12)), sg.Text(text='', expand_x=True)],
+         [sg.Button('Add Resident', button_color='green', pad=6, font=(FONT, 12)), sg.Button('Remove Resident', button_color='red', pad=6, font=(FONT, 12))]
     ]
 
     window = sg.Window('CareTech Resident Manager', layout, element_justification='c')
@@ -258,7 +277,8 @@ def display_welcome_window(num_of_residents_local):
             display_welcome_window(db_functions.get_resident_count())
         elif event == 'Enter Resident Management':
             if db_functions.get_resident_count() == 0:
-                sg.popup("Your Facility Has No Residents. Please Select Click Add Resident.")
+                sg.popup("Your Facility Has No Residents. Please Select Click Add Resident.", font=(FONT, 12), 
+                         title='Error- No Residents')
                 continue
             else:
                 window.hide()

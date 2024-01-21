@@ -9,9 +9,9 @@ def add_medication_window(resident_name):
     
     layout = [
         [sg.Text('Medication Type', size=(18, 1), font=(welcome_screen.FONT, 12)), sg.Combo(medication_type_options, default_value='Scheduled', key='Medication Type', readonly=True, enable_events=True, font=(welcome_screen.FONT, 12))],
-        [sg.Text('Medication Name', size=(18, 1), font=(welcome_screen.FONT, 12)), sg.InputText(key='Medication Name')],
-        [sg.Text('Dosage', size=(18, 1), font=(welcome_screen.FONT, 12)), sg.InputText(key='Dosage')],
-        [sg.Text('Instructions', size=(18, 1), font=(welcome_screen.FONT, 12)), sg.InputText(key='Instructions')],
+        [sg.Text('Medication Name', size=(18, 1), font=(welcome_screen.FONT, 12)), sg.InputText(key='Medication Name', font=(welcome_screen.FONT, 12))],
+        [sg.Text('Dosage', size=(18, 1), font=(welcome_screen.FONT, 12)), sg.InputText(key='Dosage', font=(welcome_screen.FONT, 12))],
+        [sg.Text('Instructions', size=(18, 1), font=(welcome_screen.FONT, 12)), sg.InputText(key='Instructions', font=(welcome_screen.FONT, 12))],
         [sg.Text('(Required For PRN Medication)', font=(welcome_screen.FONT, 10))],
         [sg.Text('', expand_x=True), sg.Frame('Time Slots (Select All That Apply)', [[sg.Checkbox(slot, key=f'TIME_SLOT_{slot}', font=(welcome_screen.FONT, 11)) for slot in ['Morning', 'Noon', 'Evening', 'Night']]], key='Time Slots Frame', font=(welcome_screen.FONT, 12), pad=10), sg.Text('', expand_x=True)],
         [sg.Text('', expand_x=True), sg.Column(layout=[[sg.Button('Submit', font=(welcome_screen.FONT, 11)), sg.Button('Cancel', font=(welcome_screen.FONT, 11), pad=8)]]), 
@@ -33,6 +33,11 @@ def add_medication_window(resident_name):
             dosage = values['Dosage']
             instructions = values['Instructions']
             medication_type = values['Medication Type']
+
+            #  Check if instructions are provided for PRN medications
+            if medication_type == 'As Needed (PRN)' and not instructions.strip():
+                sg.popup('Instructions are required for PRN (As Needed) medications.', title='Error')
+                continue
 
             # Retrieve time slots only for scheduled medications
             selected_time_slots = []
@@ -96,14 +101,14 @@ def create_prn_medication_entry(medication_name, dosage, instructions):
 def create_medication_entry(medication_name, dosage, instructions, time_slot, administered=''):
     return [
         sg.InputText(default_text=administered, key=f'-GIVEN_{medication_name}_{time_slot}-', size=3),
-        sg.Text(text=medication_name + " " + dosage, size=(15, 1), font=(welcome_screen.FONT, 11)),
-        sg.Text(instructions, size=(30, 1), font=(welcome_screen.FONT, 11))
+        sg.Text(text=medication_name + " " + dosage, size=(15, 1), font=(welcome_screen.FONT, 13)),
+        sg.Text(instructions, size=(30, 1), font=(welcome_screen.FONT, 13))
     ]
 
 
 def create_time_slot_section(time_slot, medications):
     layout = [create_medication_entry(med_name, med_info['dosage'], med_info['instructions'], time_slot) for med_name, med_info in medications.items()]
-    return sg.Frame(time_slot, layout, font=(welcome_screen.FONT, 11))
+    return sg.Frame(time_slot, layout, font=(welcome_screen.FONT, 13))
 
 
 def retrieve_emar_data_from_window(window, resident_name):
@@ -111,14 +116,14 @@ def retrieve_emar_data_from_window(window, resident_name):
 
     # Fetch medications for the resident
     medications_schedule = db_functions.fetch_medications_for_resident(resident_name)
-    print(medications_schedule)  # Testing
+    # print(medications_schedule)  # Testing
 
     for category in ['Scheduled', 'PRN']:
         for time_slot, medications in medications_schedule[category].items():
             if category == 'Scheduled':
                 for medication_name, medication_info in medications.items():
                     key = f"-GIVEN_{medication_name}_{time_slot}-"
-                    administered = window[key].get() 
+                    administered = window[key].get().upper()
                     emar_data.append({
                     'resident_name': resident_name,
                     'medication_name': medication_name,
@@ -175,7 +180,7 @@ def get_emar_tab_layout(resident_name):
     #print(combined_layout)
 
     # Create a scrollable container for the combined layout
-    scrollable_layout = sg.Column(combined_layout, scrollable=True, vertical_scroll_only=True, size=(730, 620))  # Adjust the size as needed
+    scrollable_layout = sg.Column(combined_layout, scrollable=True, vertical_scroll_only=True, size=(740, 685))  # Adjust the size as needed
 
     # Return the scrollable layout
     return [[scrollable_layout]]

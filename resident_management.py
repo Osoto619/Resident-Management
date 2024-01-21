@@ -30,9 +30,9 @@ def create_management_window(resident_names, selected_resident, default_tab_inde
     current_date = datetime.now().strftime("%m-%d-%y")  # Get today's date
 
     layout = [
-        [sg.Text('CareTech Resident Management', font=(welcome_screen.FONT, 18), justification='center', expand_x=True, pad=((0, 0),(20,0)))],
-        [sg.Text(text='', expand_x=True), sg.Text(current_date, key='-DATE-', font=(welcome_screen.FONT, 13)), sg.Text('' ,key='-TIME-', font=(welcome_screen.FONT, 13)), sg.Text(text='', expand_x=True)],
-        [sg.Text('Select Resident:', font=(welcome_screen.FONT, 11)), resident_selector],
+        [sg.Text('CareTech Resident Management', font=(db_functions.get_user_font(), 20), justification='center', expand_x=True, pad=((0, 0),(20,0)))],
+        [sg.Text(text='', expand_x=True), sg.Text(current_date, key='-DATE-', font=(welcome_screen.FONT, 15)), sg.Text('' ,key='-TIME-', font=(welcome_screen.FONT, 15)), sg.Text(text='', expand_x=True)],
+        [sg.Text('Select Resident:', font=(welcome_screen.FONT, 14)), resident_selector],
         [tab_group],
         [sg.Text('', expand_x=True), sg.Column(layout=[[sg.Button('Next Tab', font=(welcome_screen.FONT, 11)), sg.Button('Previous Tab', font=(welcome_screen.FONT, 11), pad=10)]]), sg.Text('', expand_x=True)]
     ]

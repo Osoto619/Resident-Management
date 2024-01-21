@@ -129,14 +129,6 @@ def show_emar_chart(resident_name, year_month):
         [sg.Column(medication_layout, scrollable=True, vertical_scroll_only=True, size=(1600, 750))]
     ]
 
-    # # Add Scheduled Medications to layout
-    # for med_name, med_info in new_structure.items():
-    #     layout.extend(create_medication_section(med_name, med_info))
-    
-    # # Add PRN Medications to layout
-    # for med_name, med_info in prn_structure.items():
-    #     layout.extend(create_prn_medication_section(med_name, med_info))
-
     layout.append([sg.Button('Save Changes Made'), sg.Button('Hide Buttons')])
     # Create the window
     window = sg.Window(' CareTech Monthly eMARS', layout, finalize=True, resizable=True)

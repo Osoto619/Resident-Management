@@ -7,7 +7,6 @@ import welcome_screen
 import db_functions
 
 
-
 def get_resident_care_level():
     with sqlite3.connect('resident_data.db') as conn:
         cursor = conn.cursor()
@@ -35,39 +34,39 @@ def get_adl_tab_layout(resident_name):
             input_fields_defaults[field] = 'Self'
 
     tab_layout = [
-            [sg.Text(f'Service Plan Followed (Initials)', font=(welcome_screen.FONT_BOLD, 12))],
-            [sg.Text('1st Shift Service Plan', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=existing_data.get('first_shift_sp', ''), key=f'{resident_name}_first_shift_sp'),
-             sg.Text('2nd Shift Service Plan', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=existing_data.get('second_shift_sp'), key=f'{resident_name}_second_shift_sp')],
-            [sg.Text("Activities (Use Activities Legend Below)", font=(welcome_screen.FONT_BOLD, 12))],
-            [sg.Text('1st Shift 1st Activity', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=existing_data.get('first_shift_activity1', ''), key=f'{resident_name}_first_shift_activity1'),
-             sg.Text("1st Shift 2nd Activity", font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=existing_data.get('first_shift_activity2', ''), key=f'{resident_name}_first_shift_activity2')],
-            [sg.Text('1st Shift 3rd Activity', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=existing_data.get('first_shift_activity3', ''), key=f'{resident_name}_first_shift_activity3'),
-             sg.Text("2nd Shift 4th Activity", font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=existing_data.get('second_shift_activity4', ''), key=f'{resident_name}_second_shift_activity4')],
-             [sg.Text("BM Record Size (S, M, L, XL, or D for Diarrhea)", font=(welcome_screen.FONT_BOLD, 12))],
-            [sg.Text('1st Shift Bowel Movement', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=input_fields_defaults['first_shift_bm'], key=f'{resident_name}_first_shift_bm'),
-             sg.Text('2nd Shift Bowel Movement', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=input_fields_defaults['second_shift_bm'], key=f'{resident_name}_second_shift_bm')],
-            [sg.Text("ADL's (initial when complete)", font=(welcome_screen.FONT_BOLD, 12))],
-            [sg.Text('Shower', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=input_fields_defaults['shower'], key=f'{resident_name}_shower'),
-             sg.Text('Shampoo', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=input_fields_defaults['shampoo'], key=f'{resident_name}_shampoo'),
-             sg.Text('Sponge Bath', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=input_fields_defaults['sponge_bath'], key=f'{resident_name}_sponge_bath'),
-             sg.Text('Peri Care AM', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=input_fields_defaults['peri_care_am'], key=f'{resident_name}_peri_care_am'),
-             sg.Text('Peri Care PM', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=input_fields_defaults['peri_care_pm'], key=f'{resident_name}_peri_care_pm')],
-            [sg.Text('Oral Care AM', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=input_fields_defaults['oral_care_am'], key=f'{resident_name}_oral_care_am'),
-             sg.Text('Oral Care PM', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=input_fields_defaults['oral_care_pm'], key=f'{resident_name}_oral_care_pm'),
-             sg.Text('Nail Care', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=input_fields_defaults['nail_care'], key=f'{resident_name}_nail_care'),
-             sg.Text('Skin Care', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=input_fields_defaults['skin_care'], key=f'{resident_name}_skin_care'),
-             sg.Text('Shave', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=input_fields_defaults['shave'], key=f'{resident_name}_shave')],
-            [sg.Text('Meals (Record Percentage of Meal Eaten)', font=(welcome_screen.FONT_BOLD, 12))],
-            [sg.Text('Breakfast', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=existing_data.get('breakfast', ''), key=f'{resident_name}_breakfast'),
-             sg.Text('Lunch', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=existing_data.get('lunch', ''), key=f'{resident_name}_lunch'),
-             sg.Text('Dinner', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=existing_data.get('dinner', ''), key=f'{resident_name}_dinner'),
-             sg.Text('Snack AM', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=existing_data.get('snack_am', ''), key=f'{resident_name}_snack_am'),
-             sg.Text('Snack PM', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=existing_data.get('snack_pm', ''), key=f'{resident_name}_snack_pm'),
-             sg.Text('Water In-Take', font=(welcome_screen.FONT, 11)), sg.InputText(size=4, default_text=existing_data.get('water_intake', ''), key=f'{resident_name}_water_intake')],
-             [sg.Text('', expand_x=True), sg.Button('Save', key=('-ADL_SAVE-'), font=(welcome_screen.FONT, 11), pad=((10, 10),(12,10))), sg.Button('View/Edit Current Month ADL Chart', key=('-CURRENT_ADL_CHART-'), font=(welcome_screen.FONT, 11), pad=((10, 10),(12,10))),
-             sg.Text('', expand_x=True)], [sg.Text('', expand_x=True), sg.Text('Or Search by Month and Year:', font=(welcome_screen.FONT, 11)), sg.Text('',expand_x=True)], 
-             [sg.Text(text="", expand_x=True),sg.Text(text="Enter Month: (MM)", font=(welcome_screen.FONT, 11)), sg.InputText(size=4, key="-ADL_MONTH-") , sg.Text("Enter Year: (YYYY)", font=(welcome_screen.FONT, 11)), sg.InputText(size=5, key='-ADL_YEAR-'), 
-             sg.Button("Search", key='-ADL_SEARCH-', font=(welcome_screen.FONT, 11)), sg.Text(text="", expand_x=True)]
+            [sg.Text(f'Service Plan Followed (Initials)', font=(welcome_screen.FONT_BOLD, 14))],
+            [sg.Text('1st Shift Service Plan', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=existing_data.get('first_shift_sp', ''), key=f'{resident_name}_first_shift_sp'),
+             sg.Text('2nd Shift Service Plan', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=existing_data.get('second_shift_sp'), key=f'{resident_name}_second_shift_sp')],
+            [sg.Text("Activities (Use Activities Legend Below)", font=(welcome_screen.FONT_BOLD, 14))],
+            [sg.Text('1st Shift 1st Activity', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=existing_data.get('first_shift_activity1', ''), key=f'{resident_name}_first_shift_activity1'),
+             sg.Text("1st Shift 2nd Activity", font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=existing_data.get('first_shift_activity2', ''), key=f'{resident_name}_first_shift_activity2')],
+            [sg.Text('1st Shift 3rd Activity', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=existing_data.get('first_shift_activity3', ''), key=f'{resident_name}_first_shift_activity3'),
+             sg.Text("2nd Shift 4th Activity", font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=existing_data.get('second_shift_activity4', ''), key=f'{resident_name}_second_shift_activity4')],
+             [sg.Text("BM Record Size (S, M, L, XL, or D for Diarrhea)", font=(welcome_screen.FONT_BOLD, 14))],
+            [sg.Text('1st Shift Bowel Movement', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=input_fields_defaults['first_shift_bm'], key=f'{resident_name}_first_shift_bm'),
+             sg.Text('2nd Shift Bowel Movement', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=input_fields_defaults['second_shift_bm'], key=f'{resident_name}_second_shift_bm')],
+            [sg.Text("ADL's (initial when complete)", font=(welcome_screen.FONT_BOLD, 14))],
+            [sg.Text('Shower', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=input_fields_defaults['shower'], key=f'{resident_name}_shower'),
+             sg.Text('Shampoo', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=input_fields_defaults['shampoo'], key=f'{resident_name}_shampoo'),
+             sg.Text('Sponge Bath', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=input_fields_defaults['sponge_bath'], key=f'{resident_name}_sponge_bath'),
+             sg.Text('Peri Care AM', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=input_fields_defaults['peri_care_am'], key=f'{resident_name}_peri_care_am'),
+             sg.Text('Peri Care PM', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=input_fields_defaults['peri_care_pm'], key=f'{resident_name}_peri_care_pm')],
+            [sg.Text('Oral Care AM', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=input_fields_defaults['oral_care_am'], key=f'{resident_name}_oral_care_am'),
+             sg.Text('Oral Care PM', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=input_fields_defaults['oral_care_pm'], key=f'{resident_name}_oral_care_pm'),
+             sg.Text('Nail Care', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=input_fields_defaults['nail_care'], key=f'{resident_name}_nail_care'),
+             sg.Text('Skin Care', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=input_fields_defaults['skin_care'], key=f'{resident_name}_skin_care'),
+             sg.Text('Shave', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=input_fields_defaults['shave'], key=f'{resident_name}_shave')],
+            [sg.Text('Meals (Record Percentage of Meal Eaten)', font=(welcome_screen.FONT_BOLD, 14))],
+            [sg.Text('Breakfast', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=existing_data.get('breakfast', ''), key=f'{resident_name}_breakfast'),
+             sg.Text('Lunch', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=existing_data.get('lunch', ''), key=f'{resident_name}_lunch'),
+             sg.Text('Dinner', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=existing_data.get('dinner', ''), key=f'{resident_name}_dinner'),
+             sg.Text('Snack AM', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=existing_data.get('snack_am', ''), key=f'{resident_name}_snack_am'),
+             sg.Text('Snack PM', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=existing_data.get('snack_pm', ''), key=f'{resident_name}_snack_pm'),
+             sg.Text('Water In-Take', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=existing_data.get('water_intake', ''), key=f'{resident_name}_water_intake')],
+             [sg.Text('', expand_x=True), sg.Button('Save', key=('-ADL_SAVE-'), font=(welcome_screen.FONT, 12), pad=((10, 10),(12,10))), sg.Button('View/Edit Current Month ADL Chart', key=('-CURRENT_ADL_CHART-'), font=(welcome_screen.FONT, 12), pad=((10, 10),(12,10))),
+             sg.Text('', expand_x=True)], [sg.Text('', expand_x=True), sg.Text('Or Search by Month and Year:', font=(welcome_screen.FONT, 12)), sg.Text('',expand_x=True)], 
+             [sg.Text(text="", expand_x=True),sg.Text(text="Enter Month: (MM)", font=(welcome_screen.FONT, 12)), sg.InputText(size=4, key="-ADL_MONTH-") , sg.Text("Enter Year: (YYYY)", font=(welcome_screen.FONT, 12)), sg.InputText(size=5, key='-ADL_YEAR-'), 
+             sg.Button("Search", key='-ADL_SEARCH-', font=(welcome_screen.FONT, 12)), sg.Text(text="", expand_x=True)]
         ]
     
     # Create the activities frame
@@ -77,7 +76,7 @@ def get_adl_tab_layout(resident_name):
     tab_layout.append([sg.Text(text='', expand_x=True), activities_frame, sg.Text(text='', expand_x=True)])
 
     # Create a scrollable container for the layout
-    scrollable_layout = sg.Column(tab_layout, size=(730,620)) # Adjust the size as needed
+    scrollable_layout = sg.Column(tab_layout, size=(740,685)) # Adjust the size as needed
 
 
     # return tab_layout
@@ -106,13 +105,13 @@ def create_activities_frame():
         ]
 
     # Divide activities into three columns
-    column1 = [[sg.Text(activities[i], font=(welcome_screen.FONT, 10))] for i in range(0, len(activities), 3)]
-    column2 = [[sg.Text(activities[i], font=(welcome_screen.FONT, 10))] for i in range(1, len(activities), 3)]
-    column3 = [[sg.Text(activities[i], font=(welcome_screen.FONT, 10))] for i in range(2, len(activities), 3)]
+    column1 = [[sg.Text(activities[i], font=(welcome_screen.FONT, 11))] for i in range(0, len(activities), 3)]
+    column2 = [[sg.Text(activities[i], font=(welcome_screen.FONT, 11))] for i in range(1, len(activities), 3)]
+    column3 = [[sg.Text(activities[i], font=(welcome_screen.FONT, 11))] for i in range(2, len(activities), 3)]
     # Create a frame with three columns
     return sg.Frame('Activities', layout=[
         [sg.Column(column1), sg.Column(column2), sg.Column(column3)]
-    ], relief=sg.RELIEF_SUNKEN, font=(welcome_screen.FONT, 10), pad=13)
+    ], relief=sg.RELIEF_SUNKEN, font=(welcome_screen.FONT, 12), pad=13)
 
 
 def update_clock(window):
@@ -143,15 +142,14 @@ def retrieve_adl_data_from_window(window, resident_name):
     for key in adl_keys:
         # The keys in the window are prefixed with the resident's name
         window_key = f'{resident_name}_{key}'
-        adl_data[key] = values.get(window_key,'')  # Use .get() to handle missing keys
+        adl_data[key] = values.get(window_key,'').upper()  # Use .get() to handle missing keys
 
     return adl_data
 
 
 def create_adl_management_window():
     resident_names_local = db_functions.get_resident_names()
-    resident_self_care_status = get_resident_self_care_status()
-
+    # resident_self_care_status = get_resident_self_care_status()
 
     # Create tabs for each resident
     resident_tabs = []
@@ -166,7 +164,7 @@ def create_adl_management_window():
 
     # Layout for the ADL Management window
     layout = [
-        [sg.Text('CareTech ADL Management', font=('Helvetica', 16), justification='center', expand_x=True)],
+        [sg.Text('CareTech ADL Management', font=(db_functions.get_user_font(), 16), justification='center', expand_x=True)],
         [sg.Text(text='', expand_x=True),sg.Text(current_date, key='-DATE-', font=('Helvetica', 12)), sg.Text('', key='-TIME-', font=('Helvetica', 12)), sg.Text(text='', expand_x=True)],
         [tab_group],
         [sg.Text(text='', expand_x=True), sg.Button('Previous'), sg.Button('Next'),

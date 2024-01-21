@@ -27,6 +27,33 @@ def save_user_theme_choice(theme):
         conn.commit()
 
 
+def get_user_font():
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        # Query to select the font setting from the database
+        cursor.execute("SELECT setting_value FROM user_settings WHERE setting_name = 'font'")
+        result = cursor.fetchone()
+        # Return the result if found, otherwise return 'Helvetica' as the default font
+        return result[0] if result else 'Helvetica'
+
+
+def save_user_font_choice(font):
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        # Check if the font setting already exists
+        cursor.execute('SELECT COUNT(*) FROM user_settings WHERE setting_name = "font"')
+        exists = cursor.fetchone()[0] > 0
+
+        if exists:
+            # Update the existing font setting
+            cursor.execute('UPDATE user_settings SET setting_value = ? WHERE setting_name = "font"', (font,))
+        else:
+            # Insert a new font setting
+            cursor.execute('INSERT INTO user_settings (setting_name, setting_value) VALUES ("font", ?)', (font,))
+
+        conn.commit()
+
+
 def get_resident_count():
     """ Return the number of residents in the database. """
     with sqlite3.connect('resident_data.db') as conn:
