@@ -162,6 +162,76 @@ def insert_medication(resident_name, medication_name, dosage, instructions, medi
             conn.commit()
 
 
+def discontinue_medication(resident_name, medication_name, discontinued_date):
+    # Get the resident's ID
+    resident_id = get_resident_id(resident_name)
+    if resident_id is not None:
+        with sqlite3.connect('resident_data.db') as conn:
+            cursor = conn.cursor()
+
+            # Update the medication record with the discontinued date
+            cursor.execute('''
+                UPDATE medications 
+                SET discontinued_date = ? 
+                WHERE resident_id = ? AND medication_name = ? AND (discontinued_date IS NULL OR discontinued_date = '')
+            ''', (discontinued_date, resident_id, medication_name))
+            
+            conn.commit()
+
+
+def filter_active_medications(medication_names, resident_name):
+    active_medications = []
+
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+
+        for med_name in medication_names:
+            cursor.execute('''
+                SELECT discontinued_date FROM medications
+                JOIN residents ON medications.resident_id = residents.id
+                WHERE residents.name = ? AND medications.medication_name = ?
+            ''', (resident_name, med_name))
+            result = cursor.fetchone()
+
+            # Check if the medication is discontinued and if the discontinuation date is past the current date
+            if result is None or (result[0] is None or datetime.now().date() < datetime.strptime(result[0], '%Y-%m-%d').date()):
+                active_medications.append(med_name)
+
+    return active_medications
+
+
+def fetch_discontinued_medications(resident_name):
+    """
+    Fetches the names and discontinuation dates of discontinued medications for a given resident.
+
+    :param resident_name: Name of the resident.
+    :return: A dictionary with medication names as keys and discontinuation dates as values.
+    """
+    discontinued_medications = {}
+
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+
+        # Fetch the resident's ID
+        cursor.execute("SELECT id FROM residents WHERE name = ?", (resident_name,))
+        resident_id_result = cursor.fetchone()
+        if resident_id_result is None:
+            return discontinued_medications  # Resident not found
+        resident_id = resident_id_result[0]
+
+        # Fetch discontinued medications
+        cursor.execute('''
+            SELECT medication_name, discontinued_date FROM medications 
+            WHERE resident_id = ? AND discontinued_date IS NOT NULL
+        ''', (resident_id,))
+
+        for medication_name, discontinued_date in cursor.fetchall():
+            if discontinued_date:  # Ensure there is a discontinuation date
+                discontinued_medications[medication_name] = discontinued_date
+
+    return discontinued_medications
+
+
 def does_adl_chart_data_exist(resident_name, year_month):
     with sqlite3.connect('resident_data.db') as conn:
         cursor = conn.cursor()

@@ -45,6 +45,59 @@ def create_management_window(resident_names, selected_resident, default_tab_inde
     return window
 
 
+def open_discontinue_medication_window(resident_name):
+    # Fetch the list of medications for the resident
+    medications = db_functions.fetch_medications_for_resident(resident_name)
+    discontinued_medications = db_functions.fetch_discontinued_medications(resident_name).keys()
+    # print(medications)
+    # Extracting medication names from both Scheduled and PRN categories
+    scheduled_meds = [med_name for time_slot in medications['Scheduled'].values() for med_name in time_slot]
+    prn_meds = list(medications['PRN'].keys())
+
+    # Combine both lists
+    all_meds = scheduled_meds + prn_meds
+    # Remove Duplicates From Scheduled Medications
+    unique = set(all_meds)
+    # print(unique)
+    unique_list = list(unique)
+
+    # Exclude discontinued medications
+    active_meds = [med for med in unique_list if med not in discontinued_medications]
+
+
+    # Check if there are medications to discontinue
+    if not medications:
+        sg.popup("No medications available to discontinue for this resident.")
+        return
+
+    layout = [
+        [sg.Text("Select Medication to Discontinue:", font=(db_functions.get_user_font, 14)), sg.Combo(active_meds, key='-MEDICATION-', readonly=True, font=(db_functions.get_user_font, 14))],
+        [sg.Text("Discontinue Date (YYYY-MM-DD):", font=(db_functions.get_user_font, 14)), sg.Input(key='-DISCONTINUE_DATE-', size=17, font=(db_functions.get_user_font, 14)), 
+         sg.CalendarButton("Select Date", target='-DISCONTINUE_DATE-', format='%Y-%m-%d', font=(db_functions.get_user_font, 13))],
+        [sg.Text('', expand_x=True), sg.Submit("Discontinue", font=(db_functions.get_user_font, 13)), sg.Cancel(font=(db_functions.get_user_font, 13)), sg.Text('', expand_x=True)]
+    ]
+
+    window = sg.Window("Discontinue Medication", layout, modal=True)
+
+    while True:
+        event, values = window.read()
+        if event in (sg.WIN_CLOSED, 'Cancel'):
+            break
+        elif event == 'Discontinue':
+            medication = values['-MEDICATION-']
+            discontinue_date = values['-DISCONTINUE_DATE-']
+            if not medication or not discontinue_date:
+                sg.popup("Please select a medication and a discontinue date.")
+                continue
+
+            # Add logic to update the database for discontinuing the medication
+            db_functions.discontinue_medication(resident_name, medication, discontinue_date)
+            sg.popup(f"Medication '{medication}' has been discontinued as of {discontinue_date}.")
+            break
+
+    window.close()
+
+
 def main():
     resident_names = db_functions.get_resident_names()
     selected_resident = resident_names[0]
@@ -119,6 +172,9 @@ def main():
             window.hide()
             info_management.open_resident_info_window(selected_resident)
             window.un_hide()
+        elif event == '-DC_MEDICATION-':
+            print("testing dc medication button")
+            open_discontinue_medication_window(selected_resident)
         # Handling 'Next Tab' and 'Previous Tab' button events
         if event in ['Next Tab', 'Previous Tab']:
             if event == 'Next Tab':

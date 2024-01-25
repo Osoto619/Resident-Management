@@ -135,9 +135,46 @@ def retrieve_emar_data_from_window(window, resident_name):
     return emar_data
 
 
+def filter_medications_data(all_medications_data, active_medications):
+    filtered_data = {'Scheduled': {}, 'PRN': {}}
+
+    # Filter Scheduled Medications
+    for time_slot, meds in all_medications_data['Scheduled'].items():
+        for med_name, details in meds.items():
+            if med_name in active_medications:
+                if time_slot not in filtered_data['Scheduled']:
+                    filtered_data['Scheduled'][time_slot] = {}
+                filtered_data['Scheduled'][time_slot][med_name] = details
+
+    # Remove empty time slots from Scheduled medications
+    filtered_data['Scheduled'] = {ts: meds for ts, meds in filtered_data['Scheduled'].items() if meds}
+
+    # Filter PRN Medications
+    for med_name, details in all_medications_data['PRN'].items():
+        if med_name in active_medications:
+            filtered_data['PRN'][med_name] = details
+
+    return filtered_data
+
+
 def get_emar_tab_layout(resident_name):
     # Fetch medications for the resident, including both scheduled and PRN
-    medications_data = db_functions.fetch_medications_for_resident(resident_name)
+    all_medications_data = db_functions.fetch_medications_for_resident(resident_name)
+    # Extracting medication names and removing duplicates
+    scheduled_meds = [med_name for time_slot in all_medications_data['Scheduled'].values() for med_name in time_slot]
+    prn_meds = list(all_medications_data['PRN'].keys())
+    all_meds = list(set(scheduled_meds + prn_meds))
+    # Filter out discontinued medications
+    active_medications = db_functions.filter_active_medications(all_meds, resident_name)
+    # print('testing active medications')
+    # print(active_medications)
+    # print(all_medications_data)
+    # Filter the medications data
+    filtered_medications_data = filter_medications_data(all_medications_data, active_medications)
+    # print(filtered_medications_data)
+    # print('--------------------------------------')
+    # print(all_medications_data)
+
     existing_emar_data = db_functions.fetch_emar_data_for_resident(resident_name)
 
     # Predefined order of time slots
@@ -145,7 +182,7 @@ def get_emar_tab_layout(resident_name):
 
      # Group Scheduled Medications by Time Slot
     time_slot_groups = {}
-    for time_slot, medications in medications_data['Scheduled'].items():
+    for time_slot, medications in filtered_medications_data['Scheduled'].items():
         for med_name, med_info in medications.items():
             if time_slot not in time_slot_groups:
                 time_slot_groups[time_slot] = []
@@ -160,16 +197,16 @@ def get_emar_tab_layout(resident_name):
             sections.append([section_frame])
 
     # Handle PRN Medications
-    if medications_data['PRN']:
+    if filtered_medications_data['PRN']:
         prn_section_layout = [create_prn_medication_entry(med_name, med_info['dosage'], med_info['instructions']) 
-                          for med_name, med_info in medications_data['PRN'].items()]
+                          for med_name, med_info in filtered_medications_data['PRN'].items()]
         prn_section_frame = sg.Frame('As Needed (PRN)', prn_section_layout, font=(welcome_screen.FONT_BOLD, 12))
         sections.append([prn_section_frame])
 
 
     # Bottom part of the layout with buttons
     bottom_layout = [
-        [sg.Text('', expand_x=True), sg.Button('Save', key='-EMAR_SAVE-', font=(welcome_screen.FONT, 11)), sg.Button('Add Medication', key='-ADD_MEDICATION-', font=(welcome_screen.FONT, 11)), sg.Button("Discontinue Medication", font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
+        [sg.Text('', expand_x=True), sg.Button('Save', key='-EMAR_SAVE-', font=(welcome_screen.FONT, 11)), sg.Button('Add Medication', key='-ADD_MEDICATION-', font=(welcome_screen.FONT, 11)), sg.Button("Discontinue Medication", key='-DC_MEDICATION-' , font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
         [sg.Text('', expand_x=True), sg.Button('View/Edit Current Month eMARS Chart', key='CURRENT_EMAR_CHART', font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
         [sg.Text('', expand_x=True), sg.Text('Or Search by Month and Year', font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
         [sg.Text(text="", expand_x=True), sg.Text(text="Enter Month: (MM)", font=(welcome_screen.FONT, 11)), sg.InputText(size=4, key="-EMAR_MONTH-"), sg.Text("Enter Year: (YYYY)", font=(welcome_screen.FONT, 11)), sg.InputText(size=5, key='-EMAR_YEAR-'), sg.Button("Search", key='-EMAR_SEARCH-', font=(welcome_screen.FONT, 11)), sg.Text(text="", expand_x=True)]

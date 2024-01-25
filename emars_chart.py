@@ -1,7 +1,7 @@
 import PySimpleGUI as sg
 import sqlite3
 import calendar
-import datetime
+from datetime import datetime
 import db_functions
 
 
@@ -88,6 +88,17 @@ def create_prn_details_window(event_key, resident_name, year_month):
     window.close()
 
 
+def is_after_discontinuation(year_month, discontinue_date):
+    """
+    Check if the year_month is after the discontinue_date.
+    year_month format: 'YYYY-MM'
+    discontinue_date format: 'YYYY-MM-DD'
+    """
+    year_month_dt = datetime.strptime(year_month, "%Y-%m")
+    discontinue_date_dt = datetime.strptime(discontinue_date, "%Y-%m-%d")
+    return year_month_dt > discontinue_date_dt
+
+
 def show_emar_chart(resident_name, year_month):
     # Define the number of days
     num_days = 31
@@ -105,6 +116,9 @@ def show_emar_chart(resident_name, year_month):
 
     # Fetch eMAR data for the month
     emar_data = db_functions.fetch_emar_data_for_month(resident_name, year_month)
+
+    # Fetch discontinued medications with their discontinuation dates
+    discontinued_medications = db_functions.fetch_discontinued_medications(resident_name)
 
     original_structure = db_functions.fetch_medications_for_resident(resident_name)
     
@@ -132,11 +146,28 @@ def show_emar_chart(resident_name, year_month):
     }
 
 
+        # Filter out discontinued medications for future months
+    filtered_new_structure = {}
+    for med_name, med_info in new_structure.items():
+        if med_name in discontinued_medications:
+            if is_after_discontinuation(year_month, discontinued_medications[med_name]):
+                continue  # Skip this medication as it's discontinued for this month
+        filtered_new_structure[med_name] = med_info
+
+    filtered_prn_structure = {}
+    for med_name, med_info in prn_structure.items():
+        if med_name in discontinued_medications:
+            if is_after_discontinuation(year_month, discontinued_medications[med_name]):
+                continue  # Skip this medication as it's discontinued for this month
+        filtered_prn_structure[med_name] = med_info
+
+    # Use filtered_new_structure and filtered_prn_structure for creating the layout
+
     # Medication layout
     medication_layout = []
-    for med_name, med_info in new_structure.items():
+    for med_name, med_info in filtered_new_structure.items():
         medication_layout.extend(create_medication_section(med_name, med_info))
-    for med_name, med_info in prn_structure.items():
+    for med_name, med_info in filtered_prn_structure.items():
         medication_layout.extend(create_prn_medication_section(med_name, med_info))
 
     # Define the layout of the window
@@ -180,16 +211,16 @@ def show_emar_chart(resident_name, year_month):
             emar_data_dict[med_name][date] = {}
         emar_data_dict[med_name][date][time_slot] = administered
 
-    # print(original_structure)
+    # # print(original_structure)
     
     # print(prn_structure)
-    
+    # print('-----------------------')
     # print(new_structure)
 
-    # print(emar_data_dict)
+    # # print(emar_data_dict)
 
     # If data is found, update the layout fields accordingly
-    for med_name, med_info in new_structure.items():
+    for med_name, med_info in filtered_new_structure.items():
         if med_info['type'] == 'Scheduled':
             # Handle scheduled medications
             for date, slots in emar_data_dict.get(med_name, {}).items():
@@ -200,7 +231,7 @@ def show_emar_chart(resident_name, year_month):
                         window[key].update(administered)
 
         # Update layout for PRN medications
-    for med_name in prn_structure.keys():
+    for med_name in filtered_prn_structure.keys():
         for datetime_string, slots in emar_data_dict.get(med_name, {}).items():
             # Split the date and time, and then extract the day
             date_part = datetime_string.split()[0]  # Get the 'YYYY-MM-DD' part
@@ -213,6 +244,35 @@ def show_emar_chart(resident_name, year_month):
                 administered_color = 'lightgreen'
                 if window[prn_key]:
                     window[prn_key].update(administered_text, background_color='yellow')
+
+    # Update layout for scheduled and PRN medications
+    for med_name, med_info in filtered_new_structure.items():
+        # Check if the medication is discontinued
+        if med_name in discontinued_medications:
+            discontinue_date = discontinued_medications[med_name]
+            # Calculate the day of the month to start showing 'DC'
+            discontinue_day = int(discontinue_date.split('-')[2])
+
+            # Update the cells from the discontinuation date forward
+            for day in range(discontinue_day, num_days + 1):
+                for time_slot in med_info['time_slots']:
+                    key = f'-{med_name}_{time_slot}-{day}-'
+                    if window[key]:
+                        window[key].update('DC')
+
+        # Update layout for PRN medications
+    for med_name in filtered_prn_structure.keys():
+        # Check if the medication is discontinued
+        if med_name in discontinued_medications:
+            discontinue_date = discontinued_medications[med_name]
+            # Calculate the day of the month to start showing 'DC'
+            discontinue_day = int(discontinue_date.split('-')[2])
+
+            # Update the cells from the discontinuation date forward
+            for day in range(discontinue_day, num_days + 1):
+                key = f'-PRN_{med_name}-{day}-'
+                if window[key]:
+                    window[key].update('DC')
                     
     # Event Loop
     while True:
