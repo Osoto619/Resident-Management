@@ -28,6 +28,15 @@ def create_input_text(key):
     return [sg.InputText(size=(regular_cell_width, 1), pad=(3, 3), justification='center', key=f'-{key}-{i}-') for i in range(1, num_days + 1)]
 
 
+def create_prn_input_text(key):
+    return [sg.InputText(size=(regular_cell_width, 1), 
+                         pad=(3, 3), 
+                         justification='center', 
+                         key=f'-{key}-{i}-', 
+                         readonly=True, 
+                         enable_events=True) for i in range(1, num_days + 1)]
+
+
 def create_medication_section(medication_name, medication_info):
     section_layout = []
     section_layout.append(create_row_label(medication_name))
@@ -49,10 +58,34 @@ def create_prn_medication_section(medication_name, medication_info):
     section_layout.append(create_row_label(f"{medication_info['instructions']}"))
 
     # Adding a label to indicate that this is a PRN medication
-    section_layout.append(create_row_label("As Needed (PRN)"))
+    # section_layout.append(create_row_label("As Needed (PRN)"))
+    row = create_row_label("As Needed (PRN)") + [sg.Text('      ')] + create_prn_input_text(f"PRN_{medication_name}")
+    section_layout.append(row)
 
     section_layout.append(create_horizontal_bar(''))  # End with a horizontal bar
     return section_layout
+
+
+def create_prn_details_window(event_key, resident_name, year_month):
+    prn_data = db_functions.fetch_prn_data_for_day(event_key, resident_name, year_month)
+    # print(prn_data) # Debugging
+    
+    layout = [[sg.Text('', expand_x=True),sg.Text("PRN Details Window", font=(db_functions.get_user_font, 17)), sg.Text("",expand_x=True)]]
+    for entry in prn_data:
+        date_time = entry[0]
+        initials = entry[1]
+        notes = entry[2]
+        row = [sg.Text(f'Date/Time Administered: {date_time}', font=(db_functions.get_user_font, 14)), sg.Text(f'Administered by: {initials}', font=(db_functions.get_user_font, 14)),
+               sg.Text(f"Optional Notes: {notes}", font=(db_functions.get_user_font, 14))]
+        layout.append(row)
+    layout.append([sg.Text("", expand_x=True), sg.Button("Close", key="-CLOSE-", font=(db_functions.get_user_font, 14)), sg.Text("", expand_x=True)])
+    window = sg.Window("PRN Details", layout, modal=True)
+    
+    while True:
+        event, values = window.read()
+        if event == sg.WIN_CLOSED or event == "-CLOSE-":
+            break
+    window.close()
 
 
 def show_emar_chart(resident_name, year_month):
@@ -91,13 +124,12 @@ def show_emar_chart(resident_name, year_month):
     
     # Process PRN Medications
     prn_structure = {}
-    for medication_name,details, in original_structure['PRN'].items():
+    for medication_name, details in original_structure['PRN'].items():
         prn_structure[medication_name] = {
             'dosage': details['dosage'],
             'instructions': details['instructions'],
-            'type' : 'PRN'
-
-        }
+            'type': 'PRN'
+    }
 
 
     # Medication layout
@@ -129,7 +161,13 @@ def show_emar_chart(resident_name, year_month):
         [sg.Column(medication_layout, scrollable=True, vertical_scroll_only=True, size=(1600, 750))]
     ]
 
-    layout.append([sg.Button('Save Changes Made'), sg.Button('Hide Buttons')])
+    instruction_text = (
+    "Instructions for Viewing PRN Medication Details:\n"
+    "1. Select the PRN Medication Day: Click on the input box for the day you wish to view.\n"
+    "2. Press Any Alphanumeric Key (A-Z or 0-9) to view the detailed administration records for that day."
+    )
+    layout.append([sg.Text(instruction_text, key='-INSTRUCTIONS-', font=(db_functions.get_user_font, 11))])
+    layout.append([sg.Button('Save Changes Made'), sg.Button('Hide Buttons/Instructions')])
     # Create the window
     window = sg.Window(' CareTech Monthly eMARS', layout, finalize=True, resizable=True)
 
@@ -142,6 +180,14 @@ def show_emar_chart(resident_name, year_month):
             emar_data_dict[med_name][date] = {}
         emar_data_dict[med_name][date][time_slot] = administered
 
+    # print(original_structure)
+    
+    # print(prn_structure)
+    
+    # print(new_structure)
+
+    # print(emar_data_dict)
+
     # If data is found, update the layout fields accordingly
     for med_name, med_info in new_structure.items():
         if med_info['type'] == 'Scheduled':
@@ -153,28 +199,37 @@ def show_emar_chart(resident_name, year_month):
                     if window[key]:
                         window[key].update(administered)
 
-        elif med_info['type'] == 'PRN':
-            # Handle PRN medications
-            # You might want to list all administered instances in a single field or a different format
-            # Example: creating a key for PRN medications
-            prn_key = f'-PRN_{med_name}-'
-            administered_list = [administered for date, slots in emar_data_dict.get(med_name, {}).items() for administered in slots.values()]
-            administered_text = ', '.join(administered_list)
-            if window[prn_key]:
-                window[prn_key].update(administered_text)
+        # Update layout for PRN medications
+    for med_name in prn_structure.keys():
+        for datetime_string, slots in emar_data_dict.get(med_name, {}).items():
+            # Split the date and time, and then extract the day
+            date_part = datetime_string.split()[0]  # Get the 'YYYY-MM-DD' part
+            day = int(date_part.split('-')[2])  # Extract the day
 
+            prn_key = f'-PRN_{med_name}-{day}-'
+            # Check if there is any administration data for the day
+            if any(slots.values()):
+                administered_text = 'ADM'  # Indicating at least one administration
+                administered_color = 'lightgreen'
+                if window[prn_key]:
+                    window[prn_key].update(administered_text, background_color='yellow')
+                    
     # Event Loop
     while True:
         event, values = window.read()
         if event == sg.WIN_CLOSED:
             break
-        elif event == 'Hide Buttons':
+        elif event == 'Hide Buttons/Instructions':
             window['Save Changes Made'].update(visible=False)
-            window['Hide Buttons'].update(visible=False)
+            window['Hide Buttons/Instructions'].update(visible=False)
+            window['-INSTRUCTIONS-'].update(visible=False)
         elif event == 'Save Changes Made':
             db_functions.save_emar_data_from_chart_window(resident_name,year_month,values)
             sg.popup("Changes Have Been Saved")
-        
+        elif event.startswith('-PRN'):
+            print(event) # Debugging
+            # print(year_month) 
+            create_prn_details_window(event, resident_name, year_month)
 
     window.close()
 

@@ -72,14 +72,14 @@ def open_administer_window(resident_name, medication_name):
         if event == sg.WIN_CLOSED or event == "Cancel":
             break
         elif event == "Submit":
-            initials = values['-INITIALS-'].strip()
+            initials = values['-INITIALS-'].strip().upper()
             if not initials:
                 sg.popup('Please enter your initials to proceed')
                 continue
             # Process the administration data
             admin_data = {
                 "datetime": current_datetime,
-                "initials": values['-INITIALS-'],
+                "initials": values['-INITIALS-'].upper(),
                 "notes": values['-NOTES-']
             }
             
@@ -180,7 +180,7 @@ def get_emar_tab_layout(resident_name):
     #print(combined_layout)
 
     # Create a scrollable container for the combined layout
-    scrollable_layout = sg.Column(combined_layout, scrollable=True, vertical_scroll_only=True, size=(740, 685))  # Adjust the size as needed
+    scrollable_layout = sg.Column(combined_layout, scrollable=True, vertical_scroll_only=True, size=(750, 695))  # Adjust the size as needed
 
     # Return the scrollable layout
     return [[scrollable_layout]]

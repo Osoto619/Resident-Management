@@ -202,7 +202,7 @@ def change_theme_window():
     'Webdings', 'Wingdings', 'Wingdings 2', 'Wingdings 3', 'Symbol', 
     'MS Outlook', 'Bookshelf Symbol 7', 'MT Extra', 
     'HoloLens MDL2 Assets', 'Segoe MDL2 Assets', 'Segoe UI Emoji', 
-    'Segoe UI Symbol', 'Marlett', 'Cambria Math'
+    'Segoe UI Symbol', 'Marlett', 'Cambria Math', 'Terminal'
     # Add any other symbol fonts you want to exclude
     ]
 

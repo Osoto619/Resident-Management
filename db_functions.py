@@ -431,6 +431,35 @@ def fetch_emar_data_for_month(resident_name, year_month):
         return cursor.fetchall()
 
 
+def fetch_prn_data_for_day(event_key, resident_name, year_month):
+    _, med_name, day, _ = event_key.split('-')
+    parts = med_name.split('_')
+    med_name = parts[1] 
+    day = day.zfill(2)  # Ensure day is two digits
+    date_query = f'{year_month}-{day}'
+
+    # Debugging: Print the values
+    # print(f"Medication Name: {med_name}, Date Query: {date_query}")
+
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        query = '''
+            SELECT e.date, e.administered, e.notes
+            FROM emar_chart e
+            JOIN residents r ON e.resident_id = r.id
+            JOIN medications m ON e.medication_id = m.id
+            WHERE r.name = ? AND m.medication_name = ? AND e.date LIKE ?
+        '''
+        cursor.execute(query, (resident_name, med_name, date_query + '%'))
+        result = cursor.fetchall()
+        
+        # Debugging: Print the SQL result
+        # print(f"SQL Query Result: {result}")
+
+        return result
+
+
+
 def does_emars_chart_data_exist(resident_name, year_month):
     with sqlite3.connect('resident_data.db') as conn:
         cursor = conn.cursor()
