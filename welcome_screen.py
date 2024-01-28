@@ -42,6 +42,8 @@ c.execute('''CREATE TABLE IF NOT EXISTS medications (
     dosage TEXT,
     instructions TEXT,
     medication_type TEXT DEFAULT 'Scheduled',
+    medication_form TEXT DEFAULT 'Pill',
+    count INTEGER DEFAULT NULL,
     discontinued_date DATE DEFAULT NULL,
     FOREIGN KEY(resident_id) REFERENCES residents(id))''')
 
@@ -61,6 +63,7 @@ c.execute('''CREATE TABLE IF NOT EXISTS emar_chart (
     date TEXT,
     time_slot TEXT,
     administered TEXT,
+    current_count INTEGER DEFAULT NULL,
     notes TEXT DEFAULT '',
     FOREIGN KEY(resident_id) REFERENCES residents(id),
     FOREIGN KEY(medication_id) REFERENCES medications(id),

@@ -49,13 +49,15 @@ def open_discontinue_medication_window(resident_name):
     # Fetch the list of medications for the resident
     medications = db_functions.fetch_medications_for_resident(resident_name)
     discontinued_medications = db_functions.fetch_discontinued_medications(resident_name).keys()
-    # print(medications)
+    
     # Extracting medication names from both Scheduled and PRN categories
     scheduled_meds = [med_name for time_slot in medications['Scheduled'].values() for med_name in time_slot]
     prn_meds = list(medications['PRN'].keys())
+    control_meds = list(medications['Controlled'].keys())
+    
 
     # Combine both lists
-    all_meds = scheduled_meds + prn_meds
+    all_meds = scheduled_meds + prn_meds + control_meds
     # Remove Duplicates From Scheduled Medications
     unique = set(all_meds)
     # print(unique)
@@ -165,16 +167,46 @@ def main():
             add_med_win = emar_management.add_medication_window(selected_resident)
             window = create_management_window(resident_names,selected_resident, default_tab_index=1)
         elif event.startswith('-ADMIN_'):
+            # print(event)
+            med_type = event.split('_')[1]
+            # print(med_type)
             medication_name = event.split('_')[-1]
             medication_name = medication_name[:-1]
-            emar_management.open_administer_window(selected_resident, medication_name)
+            # print(medication_name)
+            if med_type == 'PRN':
+                emar_management.prn_administer_window(selected_resident, medication_name)
+            elif med_type == 'CONTROLLED':
+                print('testing med count')
+                count, form = db_functions.get_controlled_medication_count_and_form(selected_resident, medication_name)
+                print(count, form)
+                emar_management.controlled_administer_window(selected_resident,medication_name, count, form)
         elif event == '-INFO_WINDOW-':
             window.hide()
             info_management.open_resident_info_window(selected_resident)
             window.un_hide()
         elif event == '-DC_MEDICATION-':
-            print("testing dc medication button")
-            open_discontinue_medication_window(selected_resident)
+            # Fetch the list of medications for the resident
+            medications = db_functions.fetch_medications_for_resident(selected_resident)
+            discontinued_medications = db_functions.fetch_discontinued_medications(selected_resident).keys()
+            
+            # Extracting medication names from both Scheduled and PRN categories
+            scheduled_meds = [med_name for time_slot in medications['Scheduled'].values() for med_name in time_slot]
+            prn_meds = list(medications['PRN'].keys())
+
+            # Combine both lists
+            all_meds = scheduled_meds + prn_meds
+            # Remove Duplicates From Scheduled Medications
+            unique = set(all_meds)
+            # print(unique)
+            unique_list = list(unique)
+
+            # Exclude discontinued medications
+            active_meds = [med for med in unique_list if med not in discontinued_medications]
+            if len(active_meds) > 0:
+                open_discontinue_medication_window(selected_resident)
+            else:
+                sg.popup('No Active Medications to Discontinue Available')
+            
         # Handling 'Next Tab' and 'Previous Tab' button events
         if event in ['Next Tab', 'Previous Tab']:
             if event == 'Next Tab':

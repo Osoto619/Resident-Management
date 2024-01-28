@@ -5,17 +5,18 @@ import resident_management
 import welcome_screen
 
 def add_medication_window(resident_name):
-    medication_type_options = ['Scheduled', 'As Needed (PRN)']
-    
+    medication_type_options = ['Scheduled', 'As Needed (PRN)', 'Controlled']
+    measurement_unit_options = ['Pills', 'mL', 'L', 'oz']  # Measurement units for liquids
+
     layout = [
-        [sg.Text('Medication Type', size=(18, 1), font=(welcome_screen.FONT, 12)), sg.Combo(medication_type_options, default_value='Scheduled', key='Medication Type', readonly=True, enable_events=True, font=(welcome_screen.FONT, 12))],
-        [sg.Text('Medication Name', size=(18, 1), font=(welcome_screen.FONT, 12)), sg.InputText(key='Medication Name', font=(welcome_screen.FONT, 12))],
-        [sg.Text('Dosage', size=(18, 1), font=(welcome_screen.FONT, 12)), sg.InputText(key='Dosage', font=(welcome_screen.FONT, 12))],
-        [sg.Text('Instructions', size=(18, 1), font=(welcome_screen.FONT, 12)), sg.InputText(key='Instructions', font=(welcome_screen.FONT, 12))],
-        [sg.Text('(Required For PRN Medication)', font=(welcome_screen.FONT, 10))],
-        [sg.Text('', expand_x=True), sg.Frame('Time Slots (Select All That Apply)', [[sg.Checkbox(slot, key=f'TIME_SLOT_{slot}', font=(welcome_screen.FONT, 11)) for slot in ['Morning', 'Noon', 'Evening', 'Night']]], key='Time Slots Frame', font=(welcome_screen.FONT, 12), pad=10), sg.Text('', expand_x=True)],
-        [sg.Text('', expand_x=True), sg.Column(layout=[[sg.Button('Submit', font=(welcome_screen.FONT, 11)), sg.Button('Cancel', font=(welcome_screen.FONT, 11), pad=8)]]), 
-         sg.Text('', expand_x=True)]
+        [sg.Text('Medication Type', size=(18, 1)), sg.Combo(medication_type_options, default_value='Scheduled', key='Medication Type', readonly=True, enable_events=True)],
+        [sg.Text('Medication Name', size=(18, 1)), sg.InputText(key='Medication Name')],
+        [sg.Text('Dosage', size=(18, 1)), sg.InputText(key='Dosage')],
+        [sg.Text('Instructions', size=(18, 1)), sg.InputText(key='Instructions')],
+        [sg.Text('(Required For PRN and Controlled Medication)')],
+        [sg.Frame('Time Slots (Select All That Apply)', [[sg.Checkbox(slot, key=f'TIME_SLOT_{slot}') for slot in ['Morning', 'Noon', 'Evening', 'Night']]], key='Time Slots Frame', visible=True)],
+        [sg.Text('Count', size=(6, 1), key=('Count Text'), visible=False), sg.InputText(key='Count', enable_events=True, visible=False, size=6), sg.Combo(measurement_unit_options, default_value='Pills', key='Measurement Unit', visible=False)],
+        [sg.Submit(), sg.Cancel()]
     ]
 
     window = sg.Window('Add Medication', layout)
@@ -26,45 +27,89 @@ def add_medication_window(resident_name):
         if event in (sg.WIN_CLOSED, 'Cancel'):
             break
         elif event == 'Medication Type':
-            is_prn = values['Medication Type'] == 'As Needed (PRN)'
-            window['Time Slots Frame'].update(visible=not is_prn)
+             medication_type = values['Medication Type']
+
+             if medication_type == 'Controlled':
+                window['Time Slots Frame'].update(visible=False)
+                window['Count Text'].update(visible=True)
+                window['Count'].update(visible=True)
+                window['Measurement Unit'].update(visible=True)
+             elif medication_type == 'As Needed (PRN)':
+                window['Time Slots Frame'].update(visible=False)
+                window['Count'].update(visible=False)
+                window['Measurement Unit'].update(visible=False)
+                window['Count Text'].update(visible=False)
+             else:  # Default case for 'Scheduled'
+                window['Time Slots Frame'].update(visible=True)
+                window['Count'].update(visible=False)
+                window['Measurement Unit'].update(visible=False)
+                window['Count Text'].update(visible=False)
         elif event == 'Submit':
             medication_name = values['Medication Name']
             dosage = values['Dosage']
             instructions = values['Instructions']
             medication_type = values['Medication Type']
 
-            #  Check if instructions are provided for PRN medications
-            if medication_type == 'As Needed (PRN)' and not instructions.strip():
-                sg.popup('Instructions are required for PRN (As Needed) medications.', title='Error')
+            # Check if instructions are provided for PRN and Controlled medications
+            if medication_type in ['As Needed (PRN)', 'Controlled'] and not instructions.strip():
+                sg.popup('Instructions are required for PRN and Controlled medications.', title='Error')
                 continue
 
-            # Retrieve time slots only for scheduled medications
             selected_time_slots = []
+            medication_form = None
+            medication_count = None
+
             if medication_type == 'Scheduled':
                 for slot in ['Morning', 'Noon', 'Evening', 'Night']:
                     if values[f'TIME_SLOT_{slot}']:
                         selected_time_slots.append(slot)
-            
+
+            elif medication_type == 'Controlled':
+                medication_count = int(values['Count'])
+                medication_form = 'Pill' if values['Measurement Unit'] == 'Pills' else 'Liquid'
+
+                # Convert to mL if needed
+                if values['Measurement Unit'] == 'L':
+                    # 1 liter = 1000 mL
+                    medication_count = float(medication_count) * 1000
+                elif values['Measurement Unit'] == 'oz':
+                    # 1 ounce = 29.5735 mL
+                    medication_count = float(medication_count) * 29.5735
+
+                medication_count = round(medication_count)  # Round to nearest whole number
+                # Validate medication count
+            # try:
+            #     medication_count = int(medication_count)
+            #     if medication_count < 0:
+            #         sg.popup('Please enter a valid non-negative count for the medication.', title='Error')
+            #         continue
+            # except ValueError:
+            #     sg.popup('Please enter a valid count for the medication.', title='Error')
+            #     continue
+
             # Insert the new medication
-            db_functions.insert_medication(resident_name, medication_name, dosage, instructions, medication_type, selected_time_slots)
+            db_functions.insert_medication(resident_name, medication_name, dosage, instructions, medication_type, selected_time_slots, medication_form, medication_count)
             sg.popup('Medication Saved')
             window.close()
 
     window.close()
 
-def open_administer_window(resident_name, medication_name):
-    current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+def prn_administer_window(resident_name, medication_name):
+    # Set current date and time for default values
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    current_hour = datetime.now().hour
+    current_minute = datetime.now().minute
     
     layout = [
-    [sg.Text("Medication:"), sg.Text(medication_name)],
-    [sg.Text("Date and Time:"), sg.Text(current_datetime, key='-CURRENT_DATETIME-')],
-    [sg.Text("Administered By (Initials):", size=(20, 1)), sg.InputText(key='-INITIALS-', size=(20, 1))],  # Adjusted label size and input box size
-    [sg.Text("Notes (Optional):", size=(20, 1)), sg.InputText(key='-NOTES-', size=(20, 1))],  # Adjusted label size and input box size
-    [sg.Button("Submit"), sg.Button("Cancel")]
+        [sg.Text("Medication:"), sg.Text(medication_name)],
+        [sg.Text("Date:"), sg.InputText(current_date, key='-DATE-', size=(10, 1)), 
+         sg.Text("Time:"), sg.Spin(values=[i for i in range(0, 24)], initial_value=current_hour, key='-HOUR-', size=(2, 1)),
+         sg.Text(":"), sg.Spin(values=[i for i in range(0, 60)], initial_value=current_minute, key='-MINUTE-', size=(2, 1))],
+        [sg.Text("Administered By (Initials):", size=(20, 1)), sg.InputText(key='-INITIALS-', size=(20, 1))],
+        [sg.Text("Notes (Optional):", size=(20, 1)), sg.InputText(key='-NOTES-', size=(20, 1))],
+        [sg.Button("Submit"), sg.Button("Cancel")]
     ]
 
-    
     window = sg.Window(f"Administer PRN Medication: {medication_name}", layout)
     
     while True:
@@ -76,10 +121,13 @@ def open_administer_window(resident_name, medication_name):
             if not initials:
                 sg.popup('Please enter your initials to proceed')
                 continue
-            # Process the administration data
+
+            # Combine date and time
+            admin_datetime = f"{values['-DATE-']} {values['-HOUR-']:02d}:{values['-MINUTE-']:02d}"
+
             admin_data = {
-                "datetime": current_datetime,
-                "initials": values['-INITIALS-'].upper(),
+                "datetime": admin_datetime,
+                "initials": initials,
                 "notes": values['-NOTES-']
             }
             
@@ -90,11 +138,84 @@ def open_administer_window(resident_name, medication_name):
     window.close()
 
 
+
+def controlled_administer_window(resident_name, medication_name, med_count, med_form):
+    # Set current date and time for default values
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    current_hour = datetime.now().hour
+    current_minute = datetime.now().minute
+
+    # Create layout based on medication form
+    if med_form == 'Pill':
+        count_layout = [[sg.Text("Number of Pills Administered:"), sg.InputText(key='-ADMINISTERED_COUNT-', size=(5, 1))]]
+    elif med_form == 'Liquid':
+        count_layout = [[sg.Text("Amount Administered (mL):"), sg.InputText(key='-ADMINISTERED_COUNT-', size=(5, 1))]]
+    
+    layout = [
+        [sg.Text("Medication:"), sg.Text(medication_name)],
+        [sg.Text("Date:"), sg.InputText(current_date, key='-DATE-', size=(10, 1)), 
+         sg.Text("Time:"), sg.Spin(values=[i for i in range(0, 24)], initial_value=current_hour, key='-HOUR-', size=(2, 1)),
+         sg.Text(":"), sg.Spin(values=[i for i in range(0, 60)], initial_value=current_minute, key='-MINUTE-', size=(2, 1))],
+        [sg.Text("Administered By (Initials):", size=(20, 1)), sg.InputText(key='-INITIALS-', size=(20, 1))],
+        [sg.Text("Notes:", size=(20, 1)), sg.InputText(key='-NOTES-', size=(20, 1))],
+        count_layout,  # Include count input based on medication form
+        [sg.Button("Submit"), sg.Button("Cancel")]
+    ]
+
+    window = sg.Window(f"Administer Controlled Medication: {medication_name}", layout)
+    
+    while True:
+        event, values = window.read()
+        if event == sg.WIN_CLOSED or event == "Cancel":
+            break
+        elif event == "Submit":
+            initials = values['-INITIALS-'].strip().upper()
+            if not initials:
+                sg.popup('Please enter your initials to proceed')
+                continue
+
+            # Validate the administered count
+            try:
+                administered_count = int(values['-ADMINISTERED_COUNT-'])
+                if administered_count <= 0 or administered_count > med_count:
+                    raise ValueError
+            except ValueError:
+                sg.popup('Invalid count. Please enter a valid number.')
+                continue
+
+            # Process the administration data
+            admin_datetime = f"{values['-DATE-']} {values['-HOUR-']:02d}:{values['-MINUTE-']:02d}"
+            admin_data = {
+                "datetime": admin_datetime,
+                "initials": values['-INITIALS-'].upper(),
+                "notes": values['-NOTES-'],
+                "administered_count": administered_count
+            }
+
+            # Save administration data and update medication count
+            db_functions.save_controlled_administration_data(resident_name, medication_name, admin_data, med_count - administered_count)
+            sg.popup(f"Medication {medication_name} administered.")
+
+            break
+    
+    window.close()
+
+
+
 def create_prn_medication_entry(medication_name, dosage, instructions):
     return [
         sg.Text(text=medication_name + " " + dosage, size=(15, 1), font=(welcome_screen.FONT, 11)),
         sg.Text(instructions, size=(30, 1), font=(welcome_screen.FONT, 11)),
         sg.Button('Administer', key=f'-ADMIN_PRN_{medication_name}-', font=(welcome_screen.FONT, 11))
+    ]
+
+
+def create_controlled_medication_entry(medication_name, dosage, instructions, count, form):
+    return [
+        sg.Text(text=f"{medication_name} {dosage}", size=(19, 1), font=(welcome_screen.FONT, 11)),
+        sg.Text(instructions, size=(25, 1), font=(welcome_screen.FONT, 11)),
+        sg.Text(f"Count: {count}{'mL' if form == 'Liquid' else ' Pills'}", size=(13, 1), font=(welcome_screen.FONT, 11)),
+        sg.Button('Administer', key=f'-ADMIN_CONTROLLED_{medication_name}-', font=(welcome_screen.FONT, 11))
     ]
 
 
@@ -136,7 +257,7 @@ def retrieve_emar_data_from_window(window, resident_name):
 
 
 def filter_medications_data(all_medications_data, active_medications):
-    filtered_data = {'Scheduled': {}, 'PRN': {}}
+    filtered_data = {'Scheduled': {}, 'PRN': {}, 'Controlled': {}}
 
     # Filter Scheduled Medications
     for time_slot, meds in all_medications_data['Scheduled'].items():
@@ -154,6 +275,11 @@ def filter_medications_data(all_medications_data, active_medications):
         if med_name in active_medications:
             filtered_data['PRN'][med_name] = details
 
+    # Filter Controlled Medications
+    for med_name, details in all_medications_data.get('Controlled', {}).items():
+        if med_name in active_medications:
+            filtered_data['Controlled'][med_name] = details
+
     return filtered_data
 
 
@@ -163,12 +289,12 @@ def get_emar_tab_layout(resident_name):
     # Extracting medication names and removing duplicates
     scheduled_meds = [med_name for time_slot in all_medications_data['Scheduled'].values() for med_name in time_slot]
     prn_meds = list(all_medications_data['PRN'].keys())
-    all_meds = list(set(scheduled_meds + prn_meds))
+    controlled_meds = list(all_medications_data['Controlled'].keys())
+    all_meds = list(set(scheduled_meds + prn_meds + controlled_meds))
     # Filter out discontinued medications
     active_medications = db_functions.filter_active_medications(all_meds, resident_name)
     # print('testing active medications')
     # print(active_medications)
-    # print(all_medications_data)
     # Filter the medications data
     filtered_medications_data = filter_medications_data(all_medications_data, active_medications)
     # print(filtered_medications_data)
@@ -203,6 +329,14 @@ def get_emar_tab_layout(resident_name):
         prn_section_frame = sg.Frame('As Needed (PRN)', prn_section_layout, font=(welcome_screen.FONT_BOLD, 12))
         sections.append([prn_section_frame])
 
+    # print(filtered_medications_data)
+    
+    # Handle Controlled Medications
+    if filtered_medications_data['Controlled']:
+        controlled_section_layout = [create_controlled_medication_entry(med_name, med_info['dosage'], med_info['instructions'], med_info['count'], med_info['form'])
+            for med_name, med_info in filtered_medications_data['Controlled'].items()]
+        controlled_section_frame = sg.Frame('Controlled Medications', controlled_section_layout, font=(welcome_screen.FONT_BOLD, 12))
+        sections.append([controlled_section_frame])
 
     # Bottom part of the layout with buttons
     bottom_layout = [

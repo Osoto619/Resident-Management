@@ -135,31 +135,105 @@ def fetch_medications_for_resident(resident_name):
 
         prn_medications = {med_name: {'dosage': dosage, 'instructions': instructions} for med_name, dosage, instructions in prn_results}
 
+     # Fetch Controlled Medications
+        cursor.execute("""
+            SELECT medication_name, dosage, instructions, count, medication_form
+            FROM medications 
+            WHERE resident_id = ? AND medication_type = 'Controlled'
+        """, (resident_id,))
+        controlled_results = cursor.fetchall()
+
+        controlled_medications = {med_name: {'dosage': dosage, 'instructions': instructions, 'count': count, 'form': form} 
+                                  for med_name, dosage, instructions, count, form in controlled_results}
+
     # Combine the data into a single structure
-    medications_data = {'Scheduled': scheduled_medications, 'PRN': prn_medications}
+    medications_data = {'Scheduled': scheduled_medications, 'PRN': prn_medications, 'Controlled': controlled_medications}
     return medications_data
 
 
-def insert_medication(resident_name, medication_name, dosage, instructions, medication_type, selected_time_slots):
+def insert_medication(resident_name, medication_name, dosage, instructions, medication_type, selected_time_slots, medication_form=None, count=None):
     resident_id = get_resident_id(resident_name)
     if resident_id is not None:
         with sqlite3.connect('resident_data.db') as conn:
             cursor = conn.cursor()
 
+            # Prepare values for insertion
+            values_to_insert = (resident_id, medication_name, dosage, instructions, medication_type)
+
+            # Prepare the SQL query based on medication type
+            if medication_type == 'Controlled':
+                # For controlled medications, include medication form and count
+                sql_query = 'INSERT INTO medications (resident_id, medication_name, dosage, instructions, medication_type, medication_form, count) VALUES (?, ?, ?, ?, ?, ?, ?)'
+                values_to_insert += (medication_form, count)
+            else:
+                # For other medication types, use the default query
+                sql_query = 'INSERT INTO medications (resident_id, medication_name, dosage, instructions, medication_type) VALUES (?, ?, ?, ?, ?)'
+
             # Insert medication details
-            cursor.execute('INSERT INTO medications (resident_id, medication_name, dosage, instructions, medication_type) VALUES (?, ?, ?, ?, ?)',
-                           (resident_id, medication_name, dosage, instructions, medication_type))
+            cursor.execute(sql_query, values_to_insert)
             medication_id = cursor.lastrowid
 
-            # If the medication is scheduled, handle time slot relations
+            # Handle time slot relations for scheduled medications
             if medication_type == 'Scheduled':
                 for slot in selected_time_slots:
                     cursor.execute('SELECT id FROM time_slots WHERE slot_name = ?', (slot,))
                     slot_id = cursor.fetchone()[0]
-                    cursor.execute('INSERT INTO medication_time_slots (medication_id, time_slot_id) VALUES (?, ?)',
-                                   (medication_id, slot_id))
+                    cursor.execute('INSERT INTO medication_time_slots (medication_id, time_slot_id) VALUES (?, ?)', (medication_id, slot_id))
             
             conn.commit()
+
+
+def get_controlled_medication_count_and_form(resident_name, medication_name):
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+
+        # Fetch the resident ID based on the resident's name
+        cursor.execute("SELECT id FROM residents WHERE name = ?", (resident_name,))
+        resident_id_result = cursor.fetchone()
+        if resident_id_result is None:
+            return None, None  # Resident not found
+        resident_id = resident_id_result[0]
+
+        # Fetch the count and form for the specified controlled medication
+        cursor.execute('''
+            SELECT count, medication_form FROM medications 
+            WHERE resident_id = ? AND medication_name = ? AND medication_type = 'Controlled'
+        ''', (resident_id, medication_name))
+        result = cursor.fetchone()
+        if result is None:
+            return None, None  # Medication not found or not a controlled type
+
+        medication_count, medication_form = result
+        return medication_count, medication_form  # Return the count and form
+
+
+def save_controlled_administration_data(resident_name, medication_name, admin_data, new_count):
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+
+        # Retrieve resident ID and medication ID
+        cursor.execute("SELECT id FROM residents WHERE name = ?", (resident_name,))
+        resident_id = cursor.fetchone()[0]
+
+        cursor.execute("SELECT id FROM medications WHERE medication_name = ? AND resident_id = ?", (medication_name, resident_id))
+        medication_id = cursor.fetchone()[0]
+
+        # Insert administration data into emar_chart, including the new count
+        cursor.execute('''
+            INSERT INTO emar_chart (resident_id, medication_id, date, administered, notes, current_count)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (resident_id, medication_id, admin_data['datetime'], admin_data['initials'], admin_data['notes'], new_count))
+
+        # Update medication count in medications table
+        cursor.execute('''
+            UPDATE medications
+            SET count = ?
+            WHERE id = ?
+        ''', (new_count, medication_id))
+
+        conn.commit()
+
+
 
 
 def discontinue_medication(resident_name, medication_name, discontinued_date):
@@ -528,6 +602,24 @@ def fetch_prn_data_for_day(event_key, resident_name, year_month):
 
         return result
 
+
+def fetch_controlled_data_for_day(event_key, resident_name, year_month):
+    _, med_name, day, _ = event_key.split('-')
+    parts = med_name.split('_')
+    med_name = parts[1] 
+    day = day.zfill(2)  # Ensure day is two digits
+    date_query = f'{year_month}-{day}'
+
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT e.date, e.administered, e.notes, e.current_count
+            FROM emar_chart e
+            JOIN residents r ON e.resident_id = r.id
+            JOIN medications m ON e.medication_id = m.id
+            WHERE r.name = ? AND m.medication_name = ? AND e.date LIKE ? AND m.medication_type = 'Controlled'
+        ''', (resident_name, med_name, date_query + '%'))
+        return cursor.fetchall()
 
 
 def does_emars_chart_data_exist(resident_name, year_month):

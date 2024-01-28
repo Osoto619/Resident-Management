@@ -28,12 +28,14 @@ def create_input_text(key):
     return [sg.InputText(size=(regular_cell_width, 1), pad=(3, 3), justification='center', key=f'-{key}-{i}-') for i in range(1, num_days + 1)]
 
 
-def create_prn_input_text(key):
+def create_prn_controlled_input_text(key):
     return [sg.InputText(size=(regular_cell_width, 1), 
                          pad=(3, 3), 
                          justification='center', 
                          key=f'-{key}-{i}-', 
-                         readonly=True, 
+                         readonly=True,
+                         text_color='blue',
+                         font = ('Helvetica', 10, 'bold'), 
                          enable_events=True) for i in range(1, num_days + 1)]
 
 
@@ -51,7 +53,7 @@ def create_medication_section(medication_name, medication_info):
     return section_layout
 
 
-def create_prn_medication_section(medication_name, medication_info):
+def create_prn_controlled_medication_section(medication_name, medication_info, type='PRN'):
     section_layout = []
     section_layout.append(create_row_label(medication_name))
     section_layout.append(create_row_label(f"{medication_info['dosage']}"))
@@ -59,33 +61,74 @@ def create_prn_medication_section(medication_name, medication_info):
 
     # Adding a label to indicate that this is a PRN medication
     # section_layout.append(create_row_label("As Needed (PRN)"))
-    row = create_row_label("As Needed (PRN)") + [sg.Text('      ')] + create_prn_input_text(f"PRN_{medication_name}")
+    row = create_row_label("As Needed (PRN)" if type=='PRN' else "Controlled Medication") + [sg.Text('      ')] + create_prn_controlled_input_text(f"{type}_{medication_name}")
     section_layout.append(row)
 
     section_layout.append(create_horizontal_bar(''))  # End with a horizontal bar
     return section_layout
 
 
-def create_prn_details_window(event_key, resident_name, year_month):
+def create_prn_details_window(event_key, resident_name, year_month, medication_name):
     prn_data = db_functions.fetch_prn_data_for_day(event_key, resident_name, year_month)
-    # print(prn_data) # Debugging
     
-    layout = [[sg.Text('', expand_x=True),sg.Text("PRN Details Window", font=(db_functions.get_user_font, 17)), sg.Text("",expand_x=True)]]
-    for entry in prn_data:
-        date_time = entry[0]
-        initials = entry[1]
-        notes = entry[2]
-        row = [sg.Text(f'Date/Time Administered: {date_time}', font=(db_functions.get_user_font, 14)), sg.Text(f'Administered by: {initials}', font=(db_functions.get_user_font, 14)),
-               sg.Text(f"Optional Notes: {notes}", font=(db_functions.get_user_font, 14))]
-        layout.append(row)
+    # Extract the date from the first entry in controlled_data (assuming it's always in the same format)
+    date_str = prn_data[0][0]  # Get the date string from the first entry
+    date_obj = datetime.strptime(date_str, '%Y-%m-%d %H:%M')  # Parse it as a datetime object
+    formatted_date = date_obj.strftime('%m-%d-%Y')  # Format it as DD-MM-YYYY
+    # Transform data for the table
+    table_data = [[entry[0], entry[1], entry[2]] for entry in prn_data]
+
+    # Define table headers
+    headers = ["Date/Time Administered", "Administered By", "Notes"]
+
+    # Define the layout with the table
+    layout = [
+        [sg.Text('', expand_x=True), sg.Text(f"{medication_name} {formatted_date}", font=(db_functions.get_user_font, 17)), sg.Text("", expand_x=True)],
+        [sg.Table(values=table_data, headings=headers, max_col_width=25, auto_size_columns=True, justification='left', num_rows=min(10, len(table_data)))]
+    ]
     layout.append([sg.Text("", expand_x=True), sg.Button("Close", key="-CLOSE-", font=(db_functions.get_user_font, 14)), sg.Text("", expand_x=True)])
+
     window = sg.Window("PRN Details", layout, modal=True)
     
     while True:
         event, values = window.read()
         if event == sg.WIN_CLOSED or event == "-CLOSE-":
             break
+
     window.close()
+
+
+
+def create_controlled_details_window(event_key, resident_name, year_month, medication_name):
+    controlled_data = db_functions.fetch_controlled_data_for_day(event_key, resident_name, year_month)
+    
+     # Extract the date from the first entry in controlled_data (assuming it's always in the same format)
+    date_str = controlled_data[0][0]  # Get the date string from the first entry
+    date_obj = datetime.strptime(date_str, '%Y-%m-%d %H:%M')  # Parse it as a datetime object
+    formatted_date = date_obj.strftime('%m-%d-%Y')  # Format it as DD-MM-YYYY
+
+    # Transform data for the table
+    table_data = [[entry[0], entry[1], entry[2], entry[3]] for entry in controlled_data]
+
+    # Define table headers
+    headers = ["Date/Time Administered", "Administered By", "Notes", "Count After Administration"]
+
+    # Define the layout with the table
+    layout = [
+        [sg.Text('', expand_x=True), sg.Text(f"{medication_name}  {formatted_date}", font=('Any', 17)), sg.Text("", expand_x=True)],
+        [sg.Table(values=table_data, headings=headers, max_col_width=25, auto_size_columns=True, justification='left', num_rows=min(10, len(table_data)))]
+    ]
+    layout.append([sg.Text("", expand_x=True), sg.Button("Close", key="-CLOSE-", font=('Any', 14)), sg.Text("", expand_x=True)])
+
+    window = sg.Window("Controlled Medication Details", layout, modal=True)
+    
+    while True:
+        event, values = window.read()
+        if event == sg.WIN_CLOSED or event == "-CLOSE-":
+            break
+
+    window.close()
+
 
 
 def is_after_discontinuation(year_month, discontinue_date):
@@ -119,6 +162,8 @@ def show_emar_chart(resident_name, year_month):
 
     # Fetch discontinued medications with their discontinuation dates
     discontinued_medications = db_functions.fetch_discontinued_medications(resident_name)
+    # print('testing dc meds')
+    # print(discontinued_medications)
 
     original_structure = db_functions.fetch_medications_for_resident(resident_name)
     
@@ -144,9 +189,19 @@ def show_emar_chart(resident_name, year_month):
             'instructions': details['instructions'],
             'type': 'PRN'
     }
+    
+    # Process Controlled Medications
+    controlled_structure = {}
+    for medication_name, details in original_structure['Controlled'].items():
+        controlled_structure[medication_name] = {
+            'dosage': details['dosage'],
+            'instructions': details['instructions'],
+            'form' : details['form'],
+            'count': details['count'],
+            'type': 'Controlled'
+        }
 
-
-        # Filter out discontinued medications for future months
+    # Filter out discontinued medications for future months
     filtered_new_structure = {}
     for med_name, med_info in new_structure.items():
         if med_name in discontinued_medications:
@@ -161,6 +216,17 @@ def show_emar_chart(resident_name, year_month):
                 continue  # Skip this medication as it's discontinued for this month
         filtered_prn_structure[med_name] = med_info
 
+    filtered_control_structure = {}
+    for med_name, med_info, in controlled_structure.items():
+        if med_name in discontinued_medications:
+            if is_after_discontinuation(year_month, discontinued_medications[med_name]):
+                continue
+        filtered_control_structure[med_name] = med_info
+    # print('testing controlled structure')
+    # print(controlled_structure)
+    # print('testing filtered control structure')
+    # print(filtered_control_structure)
+
     # Use filtered_new_structure and filtered_prn_structure for creating the layout
 
     # Medication layout
@@ -168,7 +234,9 @@ def show_emar_chart(resident_name, year_month):
     for med_name, med_info in filtered_new_structure.items():
         medication_layout.extend(create_medication_section(med_name, med_info))
     for med_name, med_info in filtered_prn_structure.items():
-        medication_layout.extend(create_prn_medication_section(med_name, med_info))
+        medication_layout.extend(create_prn_controlled_medication_section(med_name, med_info))
+    for med_name, med_info in filtered_control_structure.items():
+        medication_layout.extend(create_prn_controlled_medication_section(med_name, med_info, type='Control'))
 
     # Define the layout of the window
     layout = [
@@ -193,24 +261,29 @@ def show_emar_chart(resident_name, year_month):
     ]
 
     instruction_text = (
-    "Instructions for Viewing PRN Medication Details:\n"
-    "1. Select the PRN Medication Day: Click on the input box for the day you wish to view.\n"
-    "2. Press Any Alphanumeric Key (A-Z or 0-9) to view the detailed administration records for that day."
+    "Instructions for Viewing PRN and Controlled Medication Details:\n"
+    "1. Select the PRN or Controlled Medication Day: Click on the input box for the day you wish to view.\n"
+    "2. Press Any Alphanumeric Key (A-Z or 0-9) to view the detailed administration records for that day.\n"
     )
-    layout.append([sg.Text(instruction_text, key='-INSTRUCTIONS-', font=(db_functions.get_user_font, 11))])
+    legend_text = ("Legend:\n"
+    "- 'ADM' indicates the medication was administered on that day.\n"
+    "- 'DC' indicates the medication was discontinued on or after that day.")
+
+    layout.append([sg.Text(instruction_text, key='-INSTRUCTIONS-', font=(db_functions.get_user_font, 11)), sg.Text('', expand_x=True), sg.Text(legend_text, key='-LEGEND-')])
     layout.append([sg.Button('Save Changes Made'), sg.Button('Hide Buttons/Instructions')])
     # Create the window
     window = sg.Window(' CareTech Monthly eMARS', layout, finalize=True, resizable=True)
 
     # Convert the eMAR data into a more convenient structure
     emar_data_dict = {}
+    
     for med_name, date, time_slot, administered in emar_data:
         if med_name not in emar_data_dict:
             emar_data_dict[med_name] = {}
         if date not in emar_data_dict[med_name]:
             emar_data_dict[med_name][date] = {}
         emar_data_dict[med_name][date][time_slot] = administered
-
+    
     # # print(original_structure)
     
     # print(prn_structure)
@@ -237,13 +310,26 @@ def show_emar_chart(resident_name, year_month):
             date_part = datetime_string.split()[0]  # Get the 'YYYY-MM-DD' part
             day = int(date_part.split('-')[2])  # Extract the day
 
-            prn_key = f'-PRN_{med_name}-{day}-'
+            control_key = f'-PRN_{med_name}-{day}-'
             # Check if there is any administration data for the day
             if any(slots.values()):
                 administered_text = 'ADM'  # Indicating at least one administration
-                administered_color = 'lightgreen'
-                if window[prn_key]:
-                    window[prn_key].update(administered_text, background_color='yellow')
+                if window[control_key]:
+                    window[control_key].update(administered_text)
+
+    # Update layout for Controlled medications
+    for med_name in filtered_control_structure.keys():
+        for datetime_string, slots in emar_data_dict.get(med_name, {}).items():
+            # Split the date and time, and then extract the day
+            date_part = datetime_string.split()[0]  # Get the 'YYYY-MM-DD' part
+            day = int(date_part.split('-')[2])  # Extract the day
+
+            control_key = f'-Control_{med_name}-{day}-'
+            # Check if there is any administration data for the day
+            if any(slots.values()):
+                administered_text = 'ADM'  # Indicating at least one administration
+                if window[control_key]:
+                    window[control_key].update(administered_text)
 
     # Update layout for scheduled and PRN medications
     for med_name, med_info in filtered_new_structure.items():
@@ -273,6 +359,20 @@ def show_emar_chart(resident_name, year_month):
                 key = f'-PRN_{med_name}-{day}-'
                 if window[key]:
                     window[key].update('DC')
+    
+     # Update layout for Controlled medications
+    for med_name in filtered_control_structure.keys():
+        # Check if the medication is discontinued
+        if med_name in discontinued_medications:
+            discontinue_date = discontinued_medications[med_name]
+            # Calculate the day of the month to start showing 'DC'
+            discontinue_day = int(discontinue_date.split('-')[2])
+
+            # Update the cells from the discontinuation date forward
+            for day in range(discontinue_day, num_days + 1):
+                key = f'-Control_{med_name}-{day}-'
+                if window[key]:
+                    window[key].update('DC')
                     
     # Event Loop
     while True:
@@ -283,13 +383,20 @@ def show_emar_chart(resident_name, year_month):
             window['Save Changes Made'].update(visible=False)
             window['Hide Buttons/Instructions'].update(visible=False)
             window['-INSTRUCTIONS-'].update(visible=False)
+            window['-LEGEND-'].update(visible=False)
         elif event == 'Save Changes Made':
             db_functions.save_emar_data_from_chart_window(resident_name,year_month,values)
             sg.popup("Changes Have Been Saved")
         elif event.startswith('-PRN'):
-            print(event) # Debugging
-            # print(year_month) 
-            create_prn_details_window(event, resident_name, year_month)
+            _, med_name, _, _ = event.split('-')
+            parts = med_name.split('_')
+            med_name = parts[1]
+            create_prn_details_window(event, resident_name, year_month, med_name)
+        elif event.startswith('-Control'):
+            _, med_name, _, _ = event.split('-')
+            parts = med_name.split('_')
+            med_name = parts[1]
+            create_controlled_details_window(event,resident_name,year_month, med_name)
 
     window.close()
 
