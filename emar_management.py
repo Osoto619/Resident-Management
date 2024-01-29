@@ -13,7 +13,7 @@ def add_medication_window(resident_name):
         [sg.Text('Medication Name', size=(18, 1)), sg.InputText(key='Medication Name')],
         [sg.Text('Dosage', size=(18, 1)), sg.InputText(key='Dosage')],
         [sg.Text('Instructions', size=(18, 1)), sg.InputText(key='Instructions')],
-        [sg.Text('(Required For PRN and Controlled Medication)')],
+        [sg.Text('(Instructions Required For PRN and Controlled Medication)')],
         [sg.Frame('Time Slots (Select All That Apply)', [[sg.Checkbox(slot, key=f'TIME_SLOT_{slot}') for slot in ['Morning', 'Noon', 'Evening', 'Night']]], key='Time Slots Frame', visible=True)],
         [sg.Text('Count', size=(6, 1), key=('Count Text'), visible=False), sg.InputText(key='Count', enable_events=True, visible=False, size=6), sg.Combo(measurement_unit_options, default_value='Pills', key='Measurement Unit', visible=False)],
         [sg.Submit(), sg.Cancel()]

@@ -63,7 +63,8 @@ def create_prn_controlled_medication_section(medication_name, medication_info, t
     # section_layout.append(create_row_label("As Needed (PRN)"))
     row = create_row_label("As Needed (PRN)" if type=='PRN' else "Controlled Medication") + [sg.Text('      ')] + create_prn_controlled_input_text(f"{type}_{medication_name}")
     section_layout.append(row)
-
+    table_view_button = [sg.Text('     '),sg.Button('Table View', key=f'-TABLE_VIEW_{type}_{medication_name}-')]
+    section_layout.append(table_view_button)
     section_layout.append(create_horizontal_bar(''))  # End with a horizontal bar
     return section_layout
 
@@ -140,6 +141,36 @@ def is_after_discontinuation(year_month, discontinue_date):
     year_month_dt = datetime.strptime(year_month, "%Y-%m")
     discontinue_date_dt = datetime.strptime(discontinue_date, "%Y-%m-%d")
     return year_month_dt > discontinue_date_dt
+
+
+def create_monthly_details_window(resident_name, medication_name, year_month, medication_type):
+    monthly_data = db_functions.fetch_monthly_medication_data(resident_name, medication_name, year_month, medication_type)
+
+    # Define table headers based on medication type
+    if medication_type == 'Controlled':
+        headers = ["Date Administered", "Administered By", "Notes", "Count After Administration"]
+    else:  # PRN medication
+        headers = ["Date Administered", "Administered By", "Notes"]
+
+    # Transform data for the table
+    table_data = [list(row) for row in monthly_data]
+
+    # Define the layout with the table
+    layout = [
+        [sg.Text(f"Monthly Log for {medication_name}", font=("Helvetica", 16), justification='center')],
+        [sg.Table(values=table_data, headings=headers, max_col_width=25, auto_size_columns=True, justification='left', num_rows=min(10, len(table_data)))]
+    ]
+    layout.append([sg.Button("Close", key="-CLOSE-", font=("Helvetica", 11))])
+
+    # Create and show the window
+    window = sg.Window(f"Monthly Details for {medication_name}", layout, modal=True)
+
+    while True:
+        event, values = window.read()
+        if event in (sg.WIN_CLOSED, "-CLOSE-"):
+            break
+
+    window.close()
 
 
 def show_emar_chart(resident_name, year_month):
@@ -391,12 +422,22 @@ def show_emar_chart(resident_name, year_month):
             _, med_name, _, _ = event.split('-')
             parts = med_name.split('_')
             med_name = parts[1]
-            create_prn_details_window(event, resident_name, year_month, med_name)
+            if values[event]:
+                create_prn_details_window(event, resident_name, year_month, med_name)
         elif event.startswith('-Control'):
             _, med_name, _, _ = event.split('-')
             parts = med_name.split('_')
             med_name = parts[1]
-            create_controlled_details_window(event,resident_name,year_month, med_name)
+            print(event)
+            if values[event] and values[event] != 'DC':
+                create_controlled_details_window(event,resident_name,year_month, med_name)
+        elif event.startswith('-TABLE_VIEW_PRN_') or event.startswith('-TABLE_VIEW_Control'):
+            # Splitting the event string and extracting necessary parts
+            parts = event.strip('-').split('_')
+            med_type = parts[2]  # Either 'PRN' or 'Controlled'
+            med_name = '_'.join(parts[3:])  # Rejoining in case the name itself contains underscores
+            create_monthly_details_window(resident_name, med_name, year_month, med_type)
+
 
     window.close()
 
