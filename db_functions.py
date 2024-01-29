@@ -83,6 +83,24 @@ def insert_resident(name, date_of_birth, level_of_care):
         conn.commit()
 
 
+def fetch_resident_information(resident_name):
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name, date_of_birth FROM residents WHERE name = ?", (resident_name,))
+        result = cursor.fetchone()
+        if result:
+            return {'name': result[0], 'date_of_birth': result[1]}
+        else:
+            return None
+
+
+def update_resident_info(old_name, new_name, new_dob):
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE residents SET name = ?, date_of_birth = ? WHERE name = ?", (new_name, new_dob, old_name))
+        conn.commit()
+
+
 def remove_resident(resident_name):
     """ Removes a resident from the database. """
     with sqlite3.connect('resident_data.db') as conn:
@@ -182,6 +200,24 @@ def insert_medication(resident_name, medication_name, dosage, instructions, medi
                     cursor.execute('INSERT INTO medication_time_slots (medication_id, time_slot_id) VALUES (?, ?)', (medication_id, slot_id))
             
             conn.commit()
+
+
+def fetch_medication_details(medication_name, resident_id):
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT medication_name, dosage, instructions FROM medications WHERE medication_name = ? AND resident_id = ?", (medication_name, resident_id))
+        result = cursor.fetchone()
+        if result:
+            return {'medication_name': result[0], 'dosage': result[1], 'instructions': result[2]}
+        else:
+            return None
+
+
+def update_medication_details(old_name, resident_id, new_name, new_dosage, new_instructions):
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE medications SET medication_name = ?, dosage = ?, instructions = ? WHERE medication_name = ? AND resident_id = ?", (new_name, new_dosage, new_instructions, old_name, resident_id))
+        conn.commit()
 
 
 def get_controlled_medication_count_and_form(resident_name, medication_name):

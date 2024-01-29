@@ -24,6 +24,10 @@ def create_row_label(text):
     return [sg.Text(f'{text}', size=(label_cell_width+7, 1), pad=(0,0), justification='center')]
 
 
+def create_row_label_noninput(text):
+    return [sg.Text(f'{text}', size=(label_cell_width+8, 1), pad=(0,0), justification='center')]
+
+
 def create_input_text(key):
     return [sg.InputText(size=(regular_cell_width, 1), pad=(3, 3), justification='center', key=f'-{key}-{i}-') for i in range(1, num_days + 1)]
 
@@ -41,9 +45,9 @@ def create_prn_controlled_input_text(key):
 
 def create_medication_section(medication_name, medication_info):
     section_layout = []
-    section_layout.append(create_row_label(medication_name))
-    section_layout.append(create_row_label(f"{medication_info['dosage']}"))
-    section_layout.append(create_row_label(f"{medication_info['instructions']}"))
+    section_layout.append(create_row_label_noninput(medication_name))
+    section_layout.append(create_row_label_noninput(f"{medication_info['dosage']}"))
+    section_layout.append(create_row_label_noninput(f"{medication_info['instructions']}"))
 
     for time_slot in medication_info['time_slots']:
         row = create_row_label(time_slot)  + [sg.Text('      ')] + create_input_text(f"{medication_name}_{time_slot}")
@@ -55,9 +59,9 @@ def create_medication_section(medication_name, medication_info):
 
 def create_prn_controlled_medication_section(medication_name, medication_info, type='PRN'):
     section_layout = []
-    section_layout.append(create_row_label(medication_name))
-    section_layout.append(create_row_label(f"{medication_info['dosage']}"))
-    section_layout.append(create_row_label(f"{medication_info['instructions']}"))
+    section_layout.append(create_row_label_noninput(medication_name))
+    section_layout.append(create_row_label_noninput(f"{medication_info['dosage']}"))
+    section_layout.append(create_row_label_noninput(f"{medication_info['instructions']}"))
 
     # Adding a label to indicate that this is a PRN medication
     # section_layout.append(create_row_label("As Needed (PRN)"))

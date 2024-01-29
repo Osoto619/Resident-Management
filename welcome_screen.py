@@ -248,6 +248,36 @@ def change_theme_window():
 
     theme_window.close()
 
+def enter_resident_info():
+    # Fetch list of residents
+    resident_names = db_functions.get_resident_names()  # Assume this function returns a list of resident names
+
+    layout = [
+        [sg.Text('Select Resident:'), sg.Combo(resident_names, key='-RESIDENT-', readonly=True)],
+        [sg.Text('New Name:'), sg.InputText(key='-NEW_NAME-')],
+        [sg.Text('New Date of Birth:(YYYY-MM-DD)'), sg.InputText(key='-NEW_DOB-')],
+        [sg.Button('Update'), sg.Button('Cancel')]
+    ]
+
+    window = sg.Window('Edit Resident Information', layout)
+
+    while True:
+        event, values = window.read()
+        if event in (sg.WIN_CLOSED, 'Cancel'):
+            break
+        elif event == 'Update':
+            # Fetch current information
+            current_info = db_functions.fetch_resident_information(values['-RESIDENT-'])
+            if current_info:
+                # Update information
+                db_functions.update_resident_info(values['-RESIDENT-'], values['-NEW_NAME-'].strip(), values['-NEW_DOB-'].strip())
+                sg.popup('Resident information updated')
+            else:
+                sg.popup('Resident not found')
+            break
+
+    window.close()
+
 
 def display_welcome_window(num_of_residents_local):
     """ Display a welcome window with the number of residents. """
@@ -261,7 +291,8 @@ def display_welcome_window(num_of_residents_local):
                  font=(FONT, 16), justification='center', pad=(10,10))],
         [sg.Text(text='', expand_x=True), sg.Button('Enter Resident Management', pad=6, font=(FONT, 12)),
           sg.Button("Change Theme", pad=6, font=(FONT, 12)), sg.Text(text='', expand_x=True)],
-         [sg.Button('Add Resident', button_color='green', pad=6, font=(FONT, 12)), sg.Button('Remove Resident', button_color='red', pad=6, font=(FONT, 12))]
+         [sg.Button('Add Resident', button_color='green', pad=6, font=(FONT, 12)), sg.Button('Remove Resident', button_color='red', pad=6, font=(FONT, 12)), 
+          sg.Button('Edit Resident', pad=6, font=(FONT, 12))]
     ]
 
     window = sg.Window('CareTech Resident Manager', layout, element_justification='c')
@@ -274,7 +305,6 @@ def display_welcome_window(num_of_residents_local):
             window.close()
             enter_resident_info()
             display_welcome_window(db_functions.get_resident_count())
-            
         elif event == 'Remove Resident':
             window.close()
             enter_resident_removal()
@@ -287,11 +317,14 @@ def display_welcome_window(num_of_residents_local):
             else:
                 window.hide()
                 resident_management.main()
-                window.un_hide()
-                
+                window.un_hide()   
         elif event == 'Change Theme':
             window.close()
             change_theme_window()
+        elif event == 'Edit Resident':
+            window.close()
+            enter_resident_info()
+            display_welcome_window(db_functions.get_resident_count())
 
     window.close()
     conn.close()

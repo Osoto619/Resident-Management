@@ -166,6 +166,10 @@ def main():
             window.close()
             add_med_win = emar_management.add_medication_window(selected_resident)
             window = create_management_window(resident_names,selected_resident, default_tab_index=1)
+        elif event == '-EDIT_MEDICATION-':
+            window.close()
+            edit_med_win = emar_management.edit_medication_window(selected_resident)
+            window = create_management_window(resident_names,selected_resident, default_tab_index=1)
         elif event.startswith('-ADMIN_'):
             # print(event)
             med_type = event.split('_')[1]

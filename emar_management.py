@@ -94,6 +94,52 @@ def add_medication_window(resident_name):
 
     window.close()
 
+
+def get_medication_list(medication_data):
+    med_list = []
+    for category in medication_data:
+        if category == 'Scheduled':
+            for time_slot in medication_data[category]:
+                med_list.extend(medication_data[category][time_slot].keys())
+        else:
+            med_list.extend(medication_data[category].keys())
+    return list(set(med_list))  # Remove duplicates
+
+
+def edit_medication_window(selected_resident):
+    resident_id = db_functions.get_resident_id(selected_resident)
+    medication_names = db_functions.fetch_medications_for_resident(selected_resident)
+    med_list = get_medication_list(medication_names)
+
+
+    layout = [
+        [sg.Text('Select Medication:'), sg.Combo(med_list, key='-MEDICATION-', readonly=True)],
+        [sg.Text('New Medication Name:'), sg.InputText(key='-NEW_MED_NAME-')],
+        [sg.Text('New Dosage:'), sg.InputText(key='-NEW_DOSAGE-')],
+        [sg.Text('New Instructions:'), sg.InputText(key='-NEW_INSTRUCTIONS-')],
+        [sg.Button('Update'), sg.Button('Cancel')]
+    ]
+
+    window = sg.Window('Edit Medication Details', layout)
+
+    while True:
+        event, values = window.read()
+        if event in (sg.WIN_CLOSED, 'Cancel'):
+            break
+        elif event == 'Update':
+            # Fetch current medication details
+            current_details = db_functions.fetch_medication_details(values['-MEDICATION-'], resident_id)
+            if current_details:
+                # Update medication details
+                db_functions.update_medication_details(values['-MEDICATION-'], resident_id, values['-NEW_MED_NAME-'].strip(), values['-NEW_DOSAGE-'].strip(), values['-NEW_INSTRUCTIONS-'].strip())
+                sg.popup('Medication details updated')
+            else:
+                sg.popup('Medication not found')
+            break
+
+    window.close()
+
+
 def prn_administer_window(resident_name, medication_name):
     # Set current date and time for default values
     current_date = datetime.now().strftime("%Y-%m-%d")
@@ -204,7 +250,7 @@ def controlled_administer_window(resident_name, medication_name, med_count, med_
 
 def create_prn_medication_entry(medication_name, dosage, instructions):
     return [
-        sg.Text(text=medication_name + " " + dosage, size=(15, 1), font=(welcome_screen.FONT, 11)),
+        sg.Text(text=medication_name + " " + dosage, size=(23, 1), font=(welcome_screen.FONT, 11)),
         sg.Text(instructions, size=(30, 1), font=(welcome_screen.FONT, 11)),
         sg.Button('Administer', key=f'-ADMIN_PRN_{medication_name}-', font=(welcome_screen.FONT, 11))
     ]
@@ -212,7 +258,7 @@ def create_prn_medication_entry(medication_name, dosage, instructions):
 
 def create_controlled_medication_entry(medication_name, dosage, instructions, count, form):
     return [
-        sg.Text(text=f"{medication_name} {dosage}", size=(19, 1), font=(welcome_screen.FONT, 11)),
+        sg.Text(text=f"{medication_name} {dosage}", size=(23, 1), font=(welcome_screen.FONT, 11)),
         sg.Text(instructions, size=(25, 1), font=(welcome_screen.FONT, 11)),
         sg.Text(f"Count: {count}{'mL' if form == 'Liquid' else ' Pills'}", size=(13, 1), font=(welcome_screen.FONT, 11)),
         sg.Button('Administer', key=f'-ADMIN_CONTROLLED_{medication_name}-', font=(welcome_screen.FONT, 11))
@@ -222,7 +268,7 @@ def create_controlled_medication_entry(medication_name, dosage, instructions, co
 def create_medication_entry(medication_name, dosage, instructions, time_slot, administered=''):
     return [
         sg.InputText(default_text=administered, key=f'-GIVEN_{medication_name}_{time_slot}-', size=3),
-        sg.Text(text=medication_name + " " + dosage, size=(15, 1), font=(welcome_screen.FONT, 13)),
+        sg.Text(text=medication_name + " " + dosage, size=(25, 1), font=(welcome_screen.FONT, 13)),
         sg.Text(instructions, size=(30, 1), font=(welcome_screen.FONT, 13))
     ]
 
@@ -340,7 +386,7 @@ def get_emar_tab_layout(resident_name):
 
     # Bottom part of the layout with buttons
     bottom_layout = [
-        [sg.Text('', expand_x=True), sg.Button('Save', key='-EMAR_SAVE-', font=(welcome_screen.FONT, 11)), sg.Button('Add Medication', key='-ADD_MEDICATION-', font=(welcome_screen.FONT, 11)), sg.Button("Discontinue Medication", key='-DC_MEDICATION-' , font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
+        [sg.Text('', expand_x=True), sg.Button('Save', key='-EMAR_SAVE-', font=(welcome_screen.FONT, 11)), sg.Button('Add Medication', key='-ADD_MEDICATION-', font=(welcome_screen.FONT, 11)), sg.Button('Edit Medication', key='-EDIT_MEDICATION-', font=(welcome_screen.FONT, 11)), sg.Button("Discontinue Medication", key='-DC_MEDICATION-' , font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
         [sg.Text('', expand_x=True), sg.Button('View/Edit Current Month eMARS Chart', key='CURRENT_EMAR_CHART', font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
         [sg.Text('', expand_x=True), sg.Text('Or Search by Month and Year', font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
         [sg.Text(text="", expand_x=True), sg.Text(text="Enter Month: (MM)", font=(welcome_screen.FONT, 11)), sg.InputText(size=4, key="-EMAR_MONTH-"), sg.Text("Enter Year: (YYYY)", font=(welcome_screen.FONT, 11)), sg.InputText(size=5, key='-EMAR_YEAR-'), sg.Button("Search", key='-EMAR_SEARCH-', font=(welcome_screen.FONT, 11)), sg.Text(text="", expand_x=True)]
