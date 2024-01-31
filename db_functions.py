@@ -1,6 +1,217 @@
 import sqlite3
 from datetime import datetime
 import calendar
+import bcrypt
+
+
+def log_action(username, action, description):
+    # Get current time in local timezone
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO audit_logs (username, action, description, timestamp)
+            VALUES (?, ?, ?, ?)
+        ''', (username, action, description, current_time))
+        conn.commit()
+
+
+def validate_login(username, password):
+    """
+    Validate user login credentials using bcrypt for password hashing.
+
+    Args:
+    username (str): The username of the user.
+    password (str): The password of the user.
+
+    Returns:
+    bool: True if credentials are valid, otherwise False.
+    """
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT password_hash FROM users WHERE username = ?', (username,))
+        user = cursor.fetchone()
+
+        if user is None:
+            return False
+
+        # No need to encode the hashed password as it's already a byte string
+        hashed_password = user[0]
+        return bcrypt.checkpw(password.encode('utf-8'), hashed_password)
+
+
+def needs_password_reset(username):
+    """
+    Check if the user's current password is a temporary one.
+
+    Args:
+    username (str): The username of the user.
+
+    Returns:
+    bool: True if the user's password is temporary, otherwise False.
+    """
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT is_temp_password FROM users WHERE username = ?', (username,))
+        result = cursor.fetchone()
+
+        if result is None:
+            return False  # User not found
+
+        return bool(result[0])  # Convert to Boolean: 1 (True) if temp, 0 (False) otherwise
+
+
+def update_user_password(username, new_password):
+    """
+    Update the user's password in the database.
+
+    Args:
+    username (str): The username of the user.
+    new_password (str): The new password to be set for the user.
+    """
+    # Hash the new password
+    hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
+
+    # Connect to the SQLite database
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+
+        # Update the user's password and reset the is_temp_password flag
+        cursor.execute('''
+            UPDATE users
+            SET password_hash = ?, is_temp_password = 0
+            WHERE username = ?
+        ''', (hashed_password, username))
+
+        conn.commit()
+
+
+def update_user_password_and_initials(username, new_password, initials):
+    """
+    Update the password and initials for a user, and set the is_temp_password flag to False.
+
+    Args:
+    username (str): The username of the user.
+    new_password (str): The new password for the user.
+    initials (str): The initials of the user.
+    """
+    hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE users
+            SET password_hash = ?, initials = ?, is_temp_password = 0
+            WHERE username = ?
+        ''', (hashed_password, initials, username))
+        conn.commit()
+
+
+def is_first_time_setup():
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT count(*) FROM users")
+        user_count = cursor.fetchone()[0]
+        return user_count == 0
+
+
+# Function used for initial admin setup
+def create_admin_account(username, password, initials):
+    # Hash the password for secure storage
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+
+    # Connect to the SQLite database
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+
+        # Insert the new admin account into the users table with is_temp_password set to False
+        cursor.execute('''
+            INSERT INTO users (username, password_hash, role, initials, is_temp_password)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (username, hashed_password, 'admin', initials, False))
+
+        conn.commit()
+
+
+def is_username_exists(username):
+    """
+    Check if a given username already exists in the database.
+
+    Args:
+    username (str): The username to check.
+
+    Returns:
+    bool: True if the username exists, False otherwise.
+    """
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM users WHERE username = ?', (username,))
+        count = cursor.fetchone()[0]
+        return count > 0
+
+
+def create_user(username, password, role='User', is_temp_password=True, initials=''):
+    """
+    Create a new user with a hashed password using bcrypt.
+
+    Args:
+    username (str): The username of the user.
+    password (str): The plain password of the user.
+    role (str): The role of the user ('Admin' or 'User').
+    is_temp_password (bool): Flag indicating if the password is temporary.
+    initials (str): The initials of the user.
+    """
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('INSERT INTO users (username, password_hash, role, is_temp_password, initials) VALUES (?, ?, ?, ?, ?)',
+                       (username, hashed_password, role, is_temp_password, initials))
+        conn.commit()
+
+
+def is_admin(username):
+    """
+    Check if the given user is an admin.
+
+    Args:
+    username (str): The username of the user.
+
+    Returns:
+    bool: True if the user is an admin, False otherwise.
+    """
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+
+        # Fetch the role of the user
+        cursor.execute('SELECT role FROM users WHERE username = ?', (username,))
+        result = cursor.fetchone()
+
+        if result is None:
+            return False  # User not found
+        else:
+            return result[0].lower() == 'admin'  # Check if the role is 'admin'
+
+
+def get_user_initials(username):
+    """
+    Fetches the initials for a given username from the users table.
+
+    Args:
+    username (str): The username of the user.
+
+    Returns:
+    str: The initials of the user or None if not found.
+    """
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT initials FROM users WHERE username = ?", (username,))
+        result = cursor.fetchone()
+        if result:
+            return result[0]
+        else:
+            return None
+
 
 def get_user_theme():
     with sqlite3.connect('resident_data.db') as conn:

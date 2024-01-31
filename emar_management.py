@@ -3,6 +3,9 @@ import db_functions
 from datetime import datetime
 import resident_management
 import welcome_screen
+import config
+from datetime import datetime
+
 
 def add_medication_window(resident_name):
     medication_type_options = ['Scheduled', 'As Needed (PRN)', 'Controlled']
@@ -89,6 +92,8 @@ def add_medication_window(resident_name):
 
             # Insert the new medication
             db_functions.insert_medication(resident_name, medication_name, dosage, instructions, medication_type, selected_time_slots, medication_form, medication_count)
+            current_user = config.global_config['logged_in_user']
+            db_functions.log_action(current_user, 'New Medication', f'Medication Added {medication_name}, type {medication_type} by {current_user}')
             sg.popup('Medication Saved')
             window.close()
 
@@ -142,16 +147,19 @@ def edit_medication_window(selected_resident):
 
 def prn_administer_window(resident_name, medication_name):
     # Set current date and time for default values
+    curent_datetime = datetime.now()
     current_date = datetime.now().strftime("%Y-%m-%d")
     current_hour = datetime.now().hour
     current_minute = datetime.now().minute
+    current_user = config.global_config['logged_in_user']
+    user_initials = db_functions.get_user_initials(current_user)
     
     layout = [
         [sg.Text("Medication:"), sg.Text(medication_name)],
         [sg.Text("Date:"), sg.InputText(current_date, key='-DATE-', size=(10, 1)), 
          sg.Text("Time:"), sg.Spin(values=[i for i in range(0, 24)], initial_value=current_hour, key='-HOUR-', size=(2, 1)),
          sg.Text(":"), sg.Spin(values=[i for i in range(0, 60)], initial_value=current_minute, key='-MINUTE-', size=(2, 1))],
-        [sg.Text("Administered By (Initials):", size=(20, 1)), sg.InputText(key='-INITIALS-', size=(20, 1))],
+        [sg.Text("Administered By (Initials):", size=(20, 1)), sg.InputText(key='-INITIALS-', size=(20, 1), readonly=True, default_text=user_initials)],
         [sg.Text("Notes (Optional):", size=(20, 1)), sg.InputText(key='-NOTES-', size=(20, 1))],
         [sg.Button("Submit"), sg.Button("Cancel")]
     ]
@@ -163,26 +171,27 @@ def prn_administer_window(resident_name, medication_name):
         if event == sg.WIN_CLOSED or event == "Cancel":
             break
         elif event == "Submit":
-            initials = values['-INITIALS-'].strip().upper()
-            if not initials:
-                sg.popup('Please enter your initials to proceed')
+            # Combine date and time
+            admin_datetime_str = f"{values['-DATE-']} {values['-HOUR-']:02d}:{values['-MINUTE-']:02d}"
+            admin_datetime = datetime.strptime(admin_datetime_str, "%Y-%m-%d %H:%M")
+
+            # Prevent future date/time selection
+            if admin_datetime > curent_datetime:
+                sg.popup("The selected date/time is in the future. Please choose a current or past time.")
                 continue
 
-            # Combine date and time
-            admin_datetime = f"{values['-DATE-']} {values['-HOUR-']:02d}:{values['-MINUTE-']:02d}"
-
             admin_data = {
-                "datetime": admin_datetime,
-                "initials": initials,
+                "datetime": admin_datetime_str,
+                "initials": user_initials,
                 "notes": values['-NOTES-']
             }
             
             db_functions.save_prn_administration_data(resident_name, medication_name, admin_data)
+            db_functions.log_action(current_user,'Administer PRN Med', f'user: {current_user} medication: {medication_name} resident: {resident_name} ')
             sg.popup(f"Medication {medication_name} administered.")
             break
     
     window.close()
-
 
 
 def controlled_administer_window(resident_name, medication_name, med_count, med_form):
@@ -245,7 +254,6 @@ def controlled_administer_window(resident_name, medication_name, med_count, med_
             break
     
     window.close()
-
 
 
 def create_prn_medication_entry(medication_name, dosage, instructions):

@@ -180,9 +180,7 @@ def main():
             if med_type == 'PRN':
                 emar_management.prn_administer_window(selected_resident, medication_name)
             elif med_type == 'CONTROLLED':
-                print('testing med count')
                 count, form = db_functions.get_controlled_medication_count_and_form(selected_resident, medication_name)
-                print(count, form)
                 emar_management.controlled_administer_window(selected_resident,medication_name, count, form)
         elif event == '-INFO_WINDOW-':
             window.hide()

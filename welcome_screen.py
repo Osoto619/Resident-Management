@@ -1,108 +1,15 @@
 import sqlite3
 import PySimpleGUI as sg
-import adl_management
 import resident_management
 import db_functions
 from datetime import datetime, timedelta
 from tkinter import font
+import sys
+import database_setup
+import config
 
-# Connect to SQLite database
-# The database file will be 'resident_data.db'
-conn = sqlite3.connect('resident_data.db')
-c = conn.cursor()
-
-# Create table for user settings
-c.execute('''CREATE TABLE IF NOT EXISTS user_settings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    setting_name TEXT UNIQUE,
-    setting_value TEXT)''')
-
-# Create Resident table
-c.execute('''CREATE TABLE IF NOT EXISTS residents (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    date_of_birth TEXT,
-    level_of_care TEXT)''')
-
-# Create Time Slots table
-c.execute('''CREATE TABLE IF NOT EXISTS time_slots (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    slot_name TEXT UNIQUE)''')
-
-# Populate Time Slots table with standard slots
-time_slots = ['Morning', 'Noon', 'Evening', 'Night']
-for slot in time_slots:
-    c.execute('INSERT INTO time_slots (slot_name) VALUES (?) ON CONFLICT(slot_name) DO NOTHING', (slot,))
-
-# Create medications table
-c.execute('''CREATE TABLE IF NOT EXISTS medications (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    resident_id INTEGER,
-    medication_name TEXT,
-    dosage TEXT,
-    instructions TEXT,
-    medication_type TEXT DEFAULT 'Scheduled',
-    medication_form TEXT DEFAULT 'Pill',
-    count INTEGER DEFAULT NULL,
-    discontinued_date DATE DEFAULT NULL,
-    FOREIGN KEY(resident_id) REFERENCES residents(id))''')
-
-# Create medication_time_slots
-c.execute('''CREATE TABLE IF NOT EXISTS medication_time_slots (
-    medication_id INTEGER,
-    time_slot_id INTEGER,
-    FOREIGN KEY(medication_id) REFERENCES medications(id),
-    FOREIGN KEY(time_slot_id) REFERENCES time_slots(id),
-    PRIMARY KEY (medication_id, time_slot_id))''')
-
-# Create table for eMARS charts
-c.execute('''CREATE TABLE IF NOT EXISTS emar_chart (
-    chart_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    resident_id INTEGER,
-    medication_id INTEGER,
-    date TEXT,
-    time_slot TEXT,
-    administered TEXT,
-    current_count INTEGER DEFAULT NULL,
-    notes TEXT DEFAULT '',
-    FOREIGN KEY(resident_id) REFERENCES residents(id),
-    FOREIGN KEY(medication_id) REFERENCES medications(id),
-    UNIQUE(resident_id, medication_id, date, time_slot))''')
-
-# Create table for ADL charts
-c.execute('''CREATE TABLE IF NOT EXISTS adl_chart (
-            chart_id INTEGER PRIMARY KEY,
-            resident_name TEXT,
-            date TEXT,
-            first_shift_sp TEXT,
-            second_shift_sp TEXT,
-            first_shift_activity1 TEXT,
-            first_shift_activity2 TEXT,
-            first_shift_activity3 TEXT,
-            second_shift_activity4 TEXT,
-            first_shift_bm TEXT,
-            second_shift_bm TEXT,
-            shower TEXT,
-            shampoo TEXT,
-            sponge_bath TEXT,
-            peri_care_am TEXT,
-            peri_care_pm TEXT,
-            oral_care_am TEXT,
-            oral_care_pm TEXT,
-            nail_care TEXT,
-            skin_care TEXT,
-            shave TEXT,
-            breakfast TEXT,
-            lunch TEXT,
-            dinner TEXT,
-            snack_am TEXT,
-            snack_pm TEXT,
-            water_intake TEXT,
-            FOREIGN KEY(resident_name) REFERENCES residents(name),
-            UNIQUE(resident_name, date))''')
-    
-conn.commit()
-
+database_setup.initialize_database()
+logged_in_user = config.global_config['logged_in_user']
 
 # Function to load and apply the user's theme
 def apply_user_theme():
@@ -144,9 +51,11 @@ def enter_resident_info():
         if event in (None, 'Cancel'):
             break
         elif event == 'Submit':
+            name = values['Name'].title()
              # Determine the selected level of care
             level_of_care = 'Supervisory Care' if values['Supervisory_Care'] else 'Personal Care' if values['Personal_Care'] else 'Directed Care'
-            db_functions.insert_resident(values['Name'].title(), values['Date_of_Birth'], level_of_care)
+            db_functions.insert_resident(name, values['Date_of_Birth'], level_of_care)
+            db_functions.log_action(logged_in_user, 'Resident aded', f'Resident Added {name} by {logged_in_user}')
             sg.popup('Resident information saved!')
             window.close()
             return True
@@ -207,11 +116,10 @@ def change_theme_window():
     'MS Outlook', 'Bookshelf Symbol 7', 'MT Extra', 
     'HoloLens MDL2 Assets', 'Segoe MDL2 Assets', 'Segoe UI Emoji', 
     'Segoe UI Symbol', 'Marlett', 'Cambria Math', 'Terminal'
-    # Add any other symbol fonts you want to exclude
+    # Exclusion List
     ]
 
     font_options = [f for f in font.families() if f not in symbol_fonts]
-    # print(font_options)
     
     layout = [
         [sg.Text(text= 'Select Theme Colors:', font=(FONT, 20))],
@@ -243,14 +151,14 @@ def change_theme_window():
             FONT = db_functions.get_user_font()
 
             theme_window.close()
-            display_welcome_window(db_functions.get_resident_count())
             break
 
     theme_window.close()
 
-def enter_resident_info():
+
+def enter_resident_edit():
     # Fetch list of residents
-    resident_names = db_functions.get_resident_names()  # Assume this function returns a list of resident names
+    resident_names = db_functions.get_resident_names()
 
     layout = [
         [sg.Text('Select Resident:'), sg.Combo(resident_names, key='-RESIDENT-', readonly=True)],
@@ -279,10 +187,178 @@ def enter_resident_info():
     window.close()
 
 
-def display_welcome_window(num_of_residents_local):
-    """ Display a welcome window with the number of residents. """
+def create_initial_admin_account_window():
+    layout = [
+    [sg.Text('', expand_x=True), sg.Text("Welcome to CareTech Resident Management", font=(db_functions.get_user_font(), 18)), sg.Text('', expand_x=True)],
+    [sg.Text("Please Set up Administrator Account", font=(db_functions.get_user_font(), 16))],
+    [sg.Text("Username:", font=(db_functions.get_user_font(), 14)), sg.InputText(key='username',size=16, font=(db_functions.get_user_font(), 14))],
+    [sg.Text("Password:", font=(db_functions.get_user_font(), 16)), sg.InputText(key='password', password_char='*', size=16, font=(db_functions.get_user_font(), 14))],
+    [sg.Text("Initials:", font=(db_functions.get_user_font(), 16)), sg.InputText(key='initials', size=4, font=(db_functions.get_user_font(), 14))],
+    [sg.Button("Create Admin Account", font=(db_functions.get_user_font(),12)), sg.Button("Exit", font=(db_functions.get_user_font(),12))]
+]
+
+    window = sg.Window("Admin Account Setup", layout)
+
+    while True:
+        event, values = window.read()
+        if event in (sg.WIN_CLOSED, "Exit"):
+            sys.exit(0)
+        elif event == "Create Admin Account":
+            username = values['username']
+            password = values['password']
+            initials = values['initials'].strip().upper()
+            # Validate input (e.g., non-empty, password strength, etc.)
+            if not username or not password:
+                sg.popup("Username and password are required.", title="Error")
+                continue
+            # Create the admin account
+            try:
+                db_functions.create_admin_account(username, password, initials)
+                db_functions.log_action(username,'Initial Admin Creation', f'First Admin: {username}')
+                sg.popup("Admin account created successfully.")
+                break
+            except Exception as e:
+                sg.popup(f"Error creating admin account: {e}", title="Error")
+
+    window.close()
+
+
+def new_user_setup_window(username):
+    layout = [
+        [sg.Text(f"Welcome {username}, please set your new password and initials.")],
+        [sg.Text("New Password:"), sg.InputText(key='new_password', password_char='*')],
+        [sg.Text("Initials:"), sg.InputText(key='initials')],
+        [sg.Button("Set Password and Initials"), sg.Button("Cancel")]
+    ]
+
+    window = sg.Window("Password Reset", layout)
+
+    while True:
+        event, values = window.read()
+        if event in (sg.WIN_CLOSED, "Cancel"):
+            break
+        elif event == "Set Password and Initials":
+            new_password = values['new_password']
+            initials = values['initials'].strip().upper()
+
+            # Validate new password and initials
+            if new_password and initials:
+                db_functions.update_user_password_and_initials(username, new_password, initials)
+                sg.popup("Password and initials updated successfully.")
+                break
+            else:
+                sg.popup("Please enter a new password and initials.", title="Error")
+
+    window.close()
+
+
+def add_user_window():
+    logged_in_user = config.global_config['logged_in_user']
+    layout = [
+        [sg.Text("Add New User")],
+        [sg.Text("Username:"), sg.InputText(key='username')],
+        [sg.Text("Temporary Password:"), sg.InputText(key='temp_password', password_char='*')],
+        [sg.Text("Role:"), sg.Combo(['User', 'Admin'], default_value='User', key='role', readonly=True)],
+        [sg.Button("Add User"), sg.Button("Cancel")]
+    ]
+
+    window = sg.Window("Add User", layout)
+
+    while True:
+        event, values = window.read()
+        if event in (sg.WIN_CLOSED, "Cancel"):
+            break
+        elif event == "Add User":
+            username = values['username']
+            temp_password = values['temp_password']
+            role = values['role']
+
+            # Validate input (e.g., non-empty, username uniqueness, etc.)
+            if not username or not temp_password:
+                sg.popup("Both username and temporary password are required.", title="Error")
+                continue
+
+            # Check for username uniqueness
+            if db_functions.is_username_exists(username):
+                sg.popup("This username already exists. Please choose another.", title="Error")
+                continue
+
+            # Add the new user
+            try:
+                db_functions.create_user(username, temp_password, role, True)  # True for is_temp_password
+                db_functions.log_action(logged_in_user, 'User Created', f'new user: {username} created by: {logged_in_user}')
+                sg.popup("User added successfully.")
+                break
+            except Exception as e:
+                sg.popup(f"Error adding user: {e}", title="Error")
+
+    window.close()
+
+
+def login_window():
     
+    layout = [
+        [sg.Text("CareTech Resident Manager", font=(db_functions.get_user_font(), 15))],
+        [sg.Text("Username:", font=(db_functions.get_user_font(), 15)), sg.InputText(key='username', size=14, font=(db_functions.get_user_font(),15))],
+        [sg.Text("Password:", font=(db_functions.get_user_font(),15)), sg.InputText(key='password', password_char='*', size=14, font=(db_functions.get_user_font(),15))],
+        [sg.Button("Login",size=14, font=(db_functions.get_user_font(),12)), sg.Button("Exit", size=14, font=(db_functions.get_user_font(),12))]
+    ]
+ 
+    window = sg.Window("Login", layout)
+
+
+    while True:
+        event, values = window.read()
+        if event in (sg.WIN_CLOSED, "Exit"):
+            sys.exit(0)
+        elif event == "Login":
+            username = values['username']
+            password = values['password']
+            
+            # Validate login credentials
+            if db_functions.validate_login(username, password):
+                # Log the successful login action
+                config.global_config['logged_in_user'] = username
+                db_functions.log_action(username, "Login", f"{username} login")
+                if db_functions.needs_password_reset(username):
+                    window.close()
+                    new_user_setup_window(username)
+                    display_welcome_window(db_functions.get_resident_count(),show_login=False)
+
+                    
+                else:
+                    # Proceed to main application
+                    sg.popup("Login Successful!", title="Success")
+                    break
+            else:
+                sg.popup("Invalid username or password.", title="Error")
+
+    window.close()
+    
+
+
+def display_welcome_window(num_of_residents_local, show_login=False):
+    
+    login_window()
+
+    if show_login and not config.global_config['logged_in_user']:
+        if db_functions.is_first_time_setup():
+            create_initial_admin_account_window()
+            
+
+    """ Display a welcome window with the number of residents. """
     image_path = 'ct-logo.png'
+
+    # Define the admin panel frame
+    admin_panel_layout = [
+        [sg.Button('Add Resident', pad=(6, 3), font=(FONT, 12)),
+        sg.Button('Remove Resident', pad=(6, 3), font=(FONT, 12)),
+        sg.Button('Edit Resident', pad=(6, 3), font=(FONT, 12))],
+        [sg.Text('', expand_x=True), sg.Button('Add User', pad=(6, 3), font=(FONT, 12)),
+        sg.Button('Remove User', pad=(6, 3), font=(FONT, 12)), sg.Text('', expand_x=True)]
+    ]
+    admin_panel = sg.Frame('Admin Panel', admin_panel_layout, font=(FONT, 14), visible=db_functions.is_admin(config.global_config['logged_in_user']))
+
     layout = [
         [sg.Text(f'CareTech Resident Manager', font=(db_functions.get_user_font(), 20),
                  justification='center', pad=(20,20))],
@@ -291,8 +367,7 @@ def display_welcome_window(num_of_residents_local):
                  font=(FONT, 16), justification='center', pad=(10,10))],
         [sg.Text(text='', expand_x=True), sg.Button('Enter Resident Management', pad=6, font=(FONT, 12)),
           sg.Button("Change Theme", pad=6, font=(FONT, 12)), sg.Text(text='', expand_x=True)],
-         [sg.Button('Add Resident', button_color='green', pad=6, font=(FONT, 12)), sg.Button('Remove Resident', button_color='red', pad=6, font=(FONT, 12)), 
-          sg.Button('Edit Resident', pad=6, font=(FONT, 12))]
+          [admin_panel]
     ]
 
     window = sg.Window('CareTech Resident Manager', layout, element_justification='c')
@@ -321,16 +396,20 @@ def display_welcome_window(num_of_residents_local):
         elif event == 'Change Theme':
             window.close()
             change_theme_window()
+            display_welcome_window(db_functions.get_resident_count())
         elif event == 'Edit Resident':
             window.close()
-            enter_resident_info()
+            enter_resident_edit()
+            display_welcome_window(db_functions.get_resident_count())
+        elif event == 'Add User':
+            window.close()
+            add_user_window()
             display_welcome_window(db_functions.get_resident_count())
 
     window.close()
-    conn.close()
 
 
 if __name__ == "__main__":
-    display_welcome_window(db_functions.get_resident_count())
+    display_welcome_window(db_functions.get_resident_count(), show_login=True)
 
 
