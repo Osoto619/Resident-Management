@@ -9,7 +9,6 @@ import database_setup
 import config
 
 database_setup.initialize_database()
-logged_in_user = config.global_config['logged_in_user']
 
 # Function to load and apply the user's theme
 def apply_user_theme():
@@ -41,7 +40,7 @@ def enter_resident_info():
      sg.Radio('Personal Care', "RADIO1", key='Personal_Care', size=(15,1), font=(FONT, 12)), 
      sg.Radio('Directed Care', "RADIO1", key='Directed_Care', size=(15,1), font=(FONT, 12))],
     [sg.Text('', expand_x=True), sg.Submit(font=(FONT, 12)), sg.Cancel(font=(FONT, 12)), sg.Text('', expand_x=True)]
-]
+            ]
 
 
     window = sg.Window('Enter Resident Info', layout)
@@ -55,6 +54,7 @@ def enter_resident_info():
              # Determine the selected level of care
             level_of_care = 'Supervisory Care' if values['Supervisory_Care'] else 'Personal Care' if values['Personal_Care'] else 'Directed Care'
             db_functions.insert_resident(name, values['Date_of_Birth'], level_of_care)
+            logged_in_user = config.global_config['logged_in_user']
             db_functions.log_action(logged_in_user, 'Resident aded', f'Resident Added {name} by {logged_in_user}')
             sg.popup('Resident information saved!')
             window.close()
@@ -139,7 +139,6 @@ def change_theme_window():
         event, values = theme_window.read()
         if event in (None, 'Cancel'):
             theme_window.close()
-            display_welcome_window(db_functions.get_resident_count())
             break
         elif event == 'Ok':
             selected_theme = values['-THEME-']
@@ -339,12 +338,13 @@ def login_window():
 
 def display_welcome_window(num_of_residents_local, show_login=False):
     
-    login_window()
+    if db_functions.is_first_time_setup():
+        create_initial_admin_account_window()
 
-    if show_login and not config.global_config['logged_in_user']:
-        if db_functions.is_first_time_setup():
-            create_initial_admin_account_window()
-            
+    if show_login:
+        login_window()
+
+    logged_in_user = config.global_config['logged_in_user']    
 
     """ Display a welcome window with the number of residents. """
     image_path = 'ct-logo.png'
@@ -406,6 +406,9 @@ def display_welcome_window(num_of_residents_local, show_login=False):
             add_user_window()
             display_welcome_window(db_functions.get_resident_count())
 
+    
+    db_functions.log_action(logged_in_user, 'Logout', f'{logged_in_user} logout')
+    config.global_config['logged_in_user'] = None
     window.close()
 
 

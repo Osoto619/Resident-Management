@@ -7,6 +7,7 @@ from datetime import datetime
 from adl_chart import show_adl_chart
 from emars_chart import show_emar_chart
 import welcome_screen
+import config
 
 
 def create_tab_layout(resident_name):
@@ -104,7 +105,10 @@ def main():
     resident_names = db_functions.get_resident_names()
     selected_resident = resident_names[0]
     current_tab_index = 0  # Initialize the tab index
-
+    logged_in_user = config.global_config['logged_in_user']
+    user_initials = db_functions.get_user_initials(logged_in_user)
+    current_date = datetime.now().strftime('%Y-%m-%d')
+    
     window = create_management_window(resident_names, selected_resident)
 
     while True:
@@ -117,12 +121,32 @@ def main():
             window = create_management_window(resident_names, selected_resident)
         elif event == '-ADL_SAVE-':
             adl_data = adl_management.retrieve_adl_data_from_window(window,selected_resident)
+            existing_adl_data = db_functions.fetch_adl_data_for_resident_and_date(selected_resident,current_date)
+            audit_description = adl_management.generate_adl_audit_description(adl_data, existing_adl_data)
+
             db_functions.save_adl_data_from_management_window(selected_resident, adl_data)
+            db_functions.log_action(logged_in_user, 'ADL Data Saved', audit_description)
             sg.popup("Data saved successfully!")
+        elif event.startswith('-CHECK'): # Checkbox for Scheduled Medications IputText
+             
+             # Split the event string
+             event_parts = event.split('_')
+             # Combine the necessary parts to form the medication name and time slot
+             med_name = '_'.join(event_parts[1:-1])
+             time_slot = event_parts[-1]
+             given_key = f'-GIVEN_{med_name}_{time_slot}' # time_slot adds the ending '-'
+                
+             # Check the state of the checkbox
+             if values[event]:  # If checked
+                 window[given_key].update(value=user_initials)  # Update with user initials
+             else:  # If unchecked
+                 window[given_key].update(value='')  # Clear the input box
         elif event == '-EMAR_SAVE-':
-            emar_data = emar_management.retrieve_emar_data_from_window(window,selected_resident)
-            
+            emar_data = emar_management.retrieve_emar_data_from_window(window, selected_resident)
+            audit_description = emar_management.compare_emar_data_and_log_changes(emar_data, selected_resident, current_date)
             db_functions.save_emar_data_from_management_window(emar_data)
+            logged_in_user = config.global_config['logged_in_user']
+            db_functions.log_action(logged_in_user, 'eMAR Data Saved', audit_description)
             sg.popup("eMAR data saved successfully!")
         elif event == '-CURRENT_ADL_CHART-':
             # Get the current month and year
@@ -132,6 +156,13 @@ def main():
             # Call the show_adl_chart function with the selected resident and current month-year
             adl_management.show_adl_chart(selected_resident, current_month_year)
             window.un_hide()
+        elif event.startswith('CHECK'): # Checkbox for ADL InputText
+            key = event.replace('CHECK_', '')
+            # Check the state of the checkbox
+            if values[event]:  # If checked
+                window[key].update(value=user_initials)
+            else:  # If unchecked
+                 window[key].update(value='')  # Clear the input box
         elif event == 'CURRENT_EMAR_CHART':
             # Get the current month and year
             current_month_year = datetime.now().strftime("%Y-%m")
@@ -155,7 +186,6 @@ def main():
             month = values['-EMAR_MONTH-'].zfill(2)
             year = values['-EMAR_YEAR-']
             month_year = f'{year}-{month}'
-            print(month_year)
             if db_functions.does_emars_chart_data_exist(selected_resident, month_year):
                 window.hide()
                 show_emar_chart(selected_resident, month_year)

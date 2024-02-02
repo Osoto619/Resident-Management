@@ -1,7 +1,6 @@
 import PySimpleGUI as sg
 import db_functions
 from datetime import datetime
-import resident_management
 import welcome_screen
 import config
 from datetime import datetime
@@ -145,6 +144,24 @@ def edit_medication_window(selected_resident):
     window.close()
 
 
+def compare_emar_data_and_log_changes(user_input_data, resident_name, date):
+    # Fetch current eMAR data from the database
+    current_data = db_functions.fetch_current_emar_data_for_resident_date(resident_name, date)
+    
+    changes_made = []
+    for entry in user_input_data:
+        matching_entry = next((item for item in current_data if item['medication_name'] == entry['medication_name'] and item['time_slot'] == entry['time_slot']), None)
+        if matching_entry:
+            if matching_entry['administered'] != entry['administered']:
+                changes_made.append(f"Administered {entry['medication_name']} at {entry['time_slot']}: {entry['administered']}")
+        else:
+            changes_made.append(f"Administered {entry['medication_name']} at {entry['time_slot']}: {entry['administered']}")
+
+    # Construct the audit log description
+    audit_description = f"eMAR changes for {resident_name} on {date}: " + "; ".join(changes_made)
+    return audit_description
+
+
 def prn_administer_window(resident_name, medication_name):
     # Set current date and time for default values
     curent_datetime = datetime.now()
@@ -275,7 +292,9 @@ def create_controlled_medication_entry(medication_name, dosage, instructions, co
 
 def create_medication_entry(medication_name, dosage, instructions, time_slot, administered=''):
     return [
-        sg.InputText(default_text=administered, key=f'-GIVEN_{medication_name}_{time_slot}-', size=3),
+        sg.Checkbox('', key=f'-CHECK_{medication_name}_{time_slot}-', enable_events=True, tooltip='Check if administered', disabled=True if administered != '' else False,
+                    default=True if administered != '' else False),
+        sg.InputText(default_text=administered, key=f'-GIVEN_{medication_name}_{time_slot}-', size=3, readonly=True),
         sg.Text(text=medication_name + " " + dosage, size=(25, 1), font=(welcome_screen.FONT, 13)),
         sg.Text(instructions, size=(30, 1), font=(welcome_screen.FONT, 13))
     ]
@@ -356,6 +375,7 @@ def get_emar_tab_layout(resident_name):
     # print(all_medications_data)
 
     existing_emar_data = db_functions.fetch_emar_data_for_resident(resident_name)
+    all_administered = True
 
     # Predefined order of time slots
     time_slot_order = ['Morning', 'Noon', 'Evening', 'Night']
@@ -364,10 +384,12 @@ def get_emar_tab_layout(resident_name):
     time_slot_groups = {}
     for time_slot, medications in filtered_medications_data['Scheduled'].items():
         for med_name, med_info in medications.items():
+            administered_value = existing_emar_data.get(med_name, {}).get(time_slot, '')
             if time_slot not in time_slot_groups:
                 time_slot_groups[time_slot] = []
-            administered_value = existing_emar_data.get(med_name, {}).get(time_slot, '')
             time_slot_groups[time_slot].append(create_medication_entry(med_name, med_info['dosage'], med_info['instructions'], time_slot, administered_value))
+            if administered_value == '':
+                all_administered = False  # Set to False if any medication is not administered
     
     # Create Frames for Each Time Slot in the predefined order
     sections = []
@@ -392,9 +414,13 @@ def get_emar_tab_layout(resident_name):
         controlled_section_frame = sg.Frame('Controlled Medications', controlled_section_layout, font=(welcome_screen.FONT_BOLD, 12))
         sections.append([controlled_section_frame])
 
+    logged_in_user = config.global_config['logged_in_user']
     # Bottom part of the layout with buttons
     bottom_layout = [
-        [sg.Text('', expand_x=True), sg.Button('Save', key='-EMAR_SAVE-', font=(welcome_screen.FONT, 11)), sg.Button('Add Medication', key='-ADD_MEDICATION-', font=(welcome_screen.FONT, 11)), sg.Button('Edit Medication', key='-EDIT_MEDICATION-', font=(welcome_screen.FONT, 11)), sg.Button("Discontinue Medication", key='-DC_MEDICATION-' , font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
+        [sg.Text('', expand_x=True), sg.Button('Save', key='-EMAR_SAVE-', font=(welcome_screen.FONT, 11), disabled=all_administered), 
+         sg.Button('Add Medication', key='-ADD_MEDICATION-', font=(welcome_screen.FONT, 11), visible=db_functions.is_admin(logged_in_user)), 
+         sg.Button('Edit Medication', key='-EDIT_MEDICATION-', font=(welcome_screen.FONT, 11)), sg.Button("Discontinue Medication", key='-DC_MEDICATION-' , font=(welcome_screen.FONT, 11)), 
+         sg.Text('', expand_x=True)],
         [sg.Text('', expand_x=True), sg.Button('View/Edit Current Month eMARS Chart', key='CURRENT_EMAR_CHART', font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
         [sg.Text('', expand_x=True), sg.Text('Or Search by Month and Year', font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
         [sg.Text(text="", expand_x=True), sg.Text(text="Enter Month: (MM)", font=(welcome_screen.FONT, 11)), sg.InputText(size=4, key="-EMAR_MONTH-"), sg.Text("Enter Year: (YYYY)", font=(welcome_screen.FONT, 11)), sg.InputText(size=5, key='-EMAR_YEAR-'), sg.Button("Search", key='-EMAR_SEARCH-', font=(welcome_screen.FONT, 11)), sg.Text(text="", expand_x=True)]

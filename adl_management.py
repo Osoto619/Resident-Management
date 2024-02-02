@@ -32,11 +32,11 @@ def get_adl_tab_layout(resident_name):
     if is_supervisory_care:
         for field in auto_self_fields:
             input_fields_defaults[field] = 'Self'
-
+    
     tab_layout = [
             [sg.Text(f'Service Plan Followed (Initials)', font=(welcome_screen.FONT_BOLD, 14))],
-            [sg.Text('1st Shift Service Plan', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=existing_data.get('first_shift_sp', ''), key=f'{resident_name}_first_shift_sp'),
-             sg.Text('2nd Shift Service Plan', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=existing_data.get('second_shift_sp'), key=f'{resident_name}_second_shift_sp')],
+            [sg.Text('1st Shift Service Plan', font=(welcome_screen.FONT, 12)), sg.Checkbox('', key=f'CHECK_{resident_name}_first_shift_sp', enable_events=True, tooltip='Check to initial', disabled= True if existing_data.get('first_shift_sp', '') != '' else False, default=True if existing_data.get('second_shift_sp', '') != '' else False), sg.InputText(size=4, default_text=existing_data.get('first_shift_sp', ''), key=f'{resident_name}_first_shift_sp', readonly=True),
+             sg.Text('2nd Shift Service Plan', font=(welcome_screen.FONT, 12)), sg.Checkbox('', key=f'CHECK_{resident_name}_second_shift_sp', enable_events=True, tooltip='Check to initial', disabled= True if existing_data.get('second_shift_sp', '') != '' else False, default=True if existing_data.get('second_shift_sp', '') != '' else False), sg.InputText(size=4, default_text=existing_data.get('second_shift_sp', ''), key=f'{resident_name}_second_shift_sp', readonly=True)],
             [sg.Text("Activities (Use Activities Legend Below)", font=(welcome_screen.FONT_BOLD, 14))],
             [sg.Text('1st Shift 1st Activity', font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=existing_data.get('first_shift_activity1', ''), key=f'{resident_name}_first_shift_activity1'),
              sg.Text("1st Shift 2nd Activity", font=(welcome_screen.FONT, 12)), sg.InputText(size=4, default_text=existing_data.get('first_shift_activity2', ''), key=f'{resident_name}_first_shift_activity2')],
@@ -146,112 +146,27 @@ def retrieve_adl_data_from_window(window, resident_name):
 
     return adl_data
 
+def generate_adl_audit_description(adl_data, existing_adl_data):
+    """
+    Generates a description of the changes made to ADL data.
 
-def create_adl_management_window():
-    resident_names_local = db_functions.get_resident_names()
-    # resident_self_care_status = get_resident_self_care_status()
+    Args:
+        adl_data (dict): The updated ADL data from the window.
+        existing_adl_data (dict): The existing ADL data from the database.
 
-    # Create tabs for each resident
-    resident_tabs = []
-    for name in resident_names_local:
-        tab_layout = get_adl_tab_layout(name)
-        resident_tabs.append(sg.Tab(name, tab_layout, key=f"TAB_{name}"))
+    Returns:
+        str: A description of the changes made.
+    """
+    changes = []
+    for key in adl_data:
+        if adl_data[key] != existing_adl_data.get(key, ''):
+            # Record the change
+            changes.append(f"{key} changed from '{existing_adl_data.get(key, '')}' to '{adl_data[key]}'")
 
-    # Create the tab group
-    tab_group = sg.TabGroup([resident_tabs], tab_location='top', key='-TABGROUP-')
+    # Format the list of changes into a string
+    if changes:
+        description = "ADL Changes: " + "; ".join(changes)
+    else:
+        description = "No changes made to ADL data."
 
-    current_date = datetime.now().strftime("%m-%d-%y")  # Get today's date
-
-    # Layout for the ADL Management window
-    layout = [
-        [sg.Text('CareTech ADL Management', font=(db_functions.get_user_font(), 16), justification='center', expand_x=True)],
-        [sg.Text(text='', expand_x=True),sg.Text(current_date, key='-DATE-', font=('Helvetica', 12)), sg.Text('', key='-TIME-', font=('Helvetica', 12)), sg.Text(text='', expand_x=True)],
-        [tab_group],
-        [sg.Text(text='', expand_x=True), sg.Button('Previous'), sg.Button('Next'),
-        sg.Text(text='', expand_x=True)],
-    ]
-
-    # Create and event loop for the window
-    window = sg.Window('ADL Management', layout)
-
-    # Event loop
-    while True:
-        event, values = window.read(timeout=1000)
-        if event in (None, 'Exit', sg.WIN_CLOSED):
-            window.close()
-            welcome_screen.display_welcome_window(welcome_screen.get_resident_count())
-            break
-        elif event == 'Next':
-            # Get the key of the currently selected tab
-            selected_tab_key = values['-TABGROUP-']
-            if selected_tab_key == None:
-                continue
-            # Extract the resident name from the selected tab key
-            selected_resident = selected_tab_key.split('_')[1]
-            # Get the index of the currently selected resident
-            selected_tab_index = resident_names_local.index(selected_resident)
-            # Calculate the new tab index for the next tab
-            new_tab_index = (selected_tab_index + 1) % len(
-                resident_names_local)
-            # Set the new tab as visible
-            window['-TABGROUP-'].Widget.select(new_tab_index)
-        elif event == 'Previous':
-            # Get the key of the currently selected tab
-            selected_tab_key = values['-TABGROUP-']
-            # Extract the resident name from the selected tab key
-            if selected_tab_key == None:
-                continue
-            selected_resident = selected_tab_key.split('_')[1]
-            # Get the index of the currently selected resident
-            selected_tab_index = resident_names_local.index(selected_resident)
-            # Calculate the new tab index for the previous tab
-            new_tab_index = (selected_tab_index - 1) % len(
-                resident_names_local)
-            # Set the new tab as visible
-            window['-TABGROUP-'].Widget.select(new_tab_index)
-        elif event == '-ADL_SAVE-':
-            # Get the name of the selected tab which corresponds to the selected resident
-            selected_tab_key = values['-TABGROUP-']  # Use the key you've assigned to the TabGroup when creating it
-            if selected_tab_key == None:
-                continue
-            selected_resident = selected_tab_key.split('_')[1]  # Assuming key format is "TAB_residentname"
-            adl_data = retrieve_adl_data_from_window(window, selected_resident)
-            # For Testing
-            # print("ADL Data to be saved:", adl_data)
-            db_functions.save_adl_data_from_management_window(selected_resident, adl_data)
-            sg.popup("Data saved successfully!")
-        elif event == "-CURRENT_CHART-":
-            # Get the name of the selected resident
-            selected_tab_key = values['-TABGROUP-']
-            if selected_tab_key == None:
-                continue
-            selected_resident = selected_tab_key.split('_')[1]
-
-            # Get the current month and year
-            current_month_year = datetime.now().strftime("%Y-%m")
-
-            # Call the show_adl_chart function with the selected resident and current month-year
-            show_adl_chart(selected_resident, current_month_year)
-        elif event == "-ADL_SEARCH-":
-            # year_month should be in the format 'YYYY-MM'
-            month = values['-ADL_MONTH-'].zfill(2)
-            year = values['-ADL_YEAR-']
-            month_year = f'{year}-{month}'
-            print(month_year)
-            selected_tab_key = values['-TABGROUP-']
-            if selected_tab_key == None:
-                continue
-            selected_resident = selected_tab_key.split('_')[1]
-            if db_functions.does_adl_chart_data_exist(selected_resident, month_year):
-                show_adl_chart(selected_resident, month_year)
-            else:
-                sg.popup("No ADL Chart Data Found for the Specified Month and Resident")
-
-        update_clock(window)
-
-    window.close()
-
-
-# Example usage from main.py:
-if __name__ == "__main__":
-    create_adl_management_window()
+    return description

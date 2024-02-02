@@ -482,8 +482,6 @@ def save_controlled_administration_data(resident_name, medication_name, admin_da
         conn.commit()
 
 
-
-
 def discontinue_medication(resident_name, medication_name, discontinued_date):
     # Get the resident's ID
     resident_id = get_resident_id(resident_name)
@@ -601,6 +599,58 @@ def fetch_adl_chart_data_for_month(resident_name, year_month):
             ORDER BY date
         ''', (resident_name, year_month))
         return cursor.fetchall()
+
+
+def fetch_adl_data_for_resident_and_date(resident_name, date):
+    """
+    Fetches ADL data for a specific resident and date.
+
+    Args:
+        resident_name (str): The name of the resident.
+        date (str): The date in YYYY-MM-DD format.
+
+    Returns:
+        dict: A dictionary containing ADL data for the resident and date.
+    """
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM adl_chart WHERE resident_name = ? AND date = ?
+        ''', (resident_name, date))
+        result = cursor.fetchone()
+
+    if result:
+        # Map the SQL result to dictionary keys based on the ADL chart structure
+        adl_data = {
+            'first_shift_sp': result[3],
+            'second_shift_sp': result[4],
+            'first_shift_activity1': result[5],
+            'first_shift_activity2': result[6],
+            'first_shift_activity3': result[7],
+            'second_shift_activity4': result[8],
+            'first_shift_bm': result[9],
+            'second_shift_bm': result[10],
+            'shower': result[11],
+            'shampoo': result[12],
+            'sponge_bath': result[13],
+            'peri_care_am': result[14],
+            'peri_care_pm': result[15],
+            'oral_care_am': result[16],
+            'oral_care_pm': result[17],
+            'nail_care': result[18],
+            'skin_care': result[19],
+            'shave': result[20],
+            'breakfast': result[21],
+            'lunch': result[22],
+            'dinner': result[23],
+            'snack_am': result[24],
+            'snack_pm': result[25],
+            'water_intake': result[26]
+        }
+        return adl_data
+    else:
+        # Return an empty dictionary if no data is found for the given resident and date
+        return {}
 
 
 def save_adl_data_from_management_window(resident_name, adl_data):
@@ -746,6 +796,17 @@ def save_emar_data_from_chart_window(resident_name, year_month, window_values):
 
         conn.commit()
 
+
+def fetch_current_emar_data_for_resident_date(resident_name, date):
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('''SELECT m.medication_name, ec.time_slot, ec.administered, ec.date
+                          FROM emar_chart ec
+                          JOIN residents r ON ec.resident_id = r.id
+                          JOIN medications m ON ec.medication_id = m.id
+                          WHERE r.name = ? AND ec.date = ?''', (resident_name, date))
+        rows = cursor.fetchall()
+        return [{'resident_name': resident_name, 'medication_name': row[0], 'time_slot': row[1], 'administered': row[2], 'date': row[3]} for row in rows]
 
 
 def save_emar_data_from_management_window(emar_data):
