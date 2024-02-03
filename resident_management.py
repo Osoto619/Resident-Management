@@ -125,7 +125,7 @@ def main():
             audit_description = adl_management.generate_adl_audit_description(adl_data, existing_adl_data)
 
             db_functions.save_adl_data_from_management_window(selected_resident, adl_data)
-            db_functions.log_action(logged_in_user, 'ADL Data Saved', audit_description)
+            db_functions.log_action(logged_in_user, f'ADL Data Saved Resident: {selected_resident}', audit_description)
             sg.popup("Data saved successfully!")
         elif event.startswith('-CHECK'): # Checkbox for Scheduled Medications IputText
              
@@ -146,7 +146,7 @@ def main():
             audit_description = emar_management.compare_emar_data_and_log_changes(emar_data, selected_resident, current_date)
             db_functions.save_emar_data_from_management_window(emar_data)
             logged_in_user = config.global_config['logged_in_user']
-            db_functions.log_action(logged_in_user, 'eMAR Data Saved', audit_description)
+            db_functions.log_action(logged_in_user, f'eMAR Data Saved Resident: {selected_resident}', audit_description)
             sg.popup("eMAR data saved successfully!")
         elif event == '-CURRENT_ADL_CHART-':
             # Get the current month and year

@@ -1,7 +1,60 @@
 import sqlite3
 from datetime import datetime
+import os
 import calendar
 import bcrypt
+from cryptography.fernet import Fernet
+import base64
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+passphrase = os.environ.get('RESIDENT_MGMT_DB_KEY').encode()  # Convert to bytes
+
+salt = b'\x00'*16  # Use a fixed salt; TO BE CHANGED TO BE RANDOM
+
+# Generate a key from the passphrase
+kdf = PBKDF2HMAC(
+    algorithm=hashes.SHA256(),
+    length=32,
+    salt=salt,
+    iterations=100000,
+    backend=default_backend()
+)
+key = base64.urlsafe_b64encode(kdf.derive(passphrase))
+fernet = Fernet(key)
+
+
+
+def encrypt_data(data):
+    return fernet.encrypt(data.encode()).decode()  # Encrypt and convert back to string
+
+def decrypt_data(data):
+    return fernet.decrypt(data.encode()).decode()  # Decrypt and convert back to string
+
+# resident_name = 'Dirty Diana'
+# encrypted_name = encrypt_data(resident_name)
+# print(encrypted_name)
+# print(decrypt_data(encrypted_name))
+
+def fetch_residents():
+    """ Fetches a list of resident names from the database. """
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT name FROM residents')
+        return [row[0] for row in cursor.fetchall()]
+
+
+def get_resident_care_level():
+    """Fetch and decrypt residents' care level from the database."""
+    decrypted_care_levels = {}
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT name, level_of_care FROM residents')
+        for name, encrypted_level_of_care in cursor.fetchall():
+            decrypted_level_of_care = decrypt_data(encrypted_level_of_care)  # Assuming decrypt_data is already defined
+            decrypted_care_levels[name] = decrypted_level_of_care
+    return decrypted_care_levels
 
 
 def log_action(username, action, description):
@@ -285,22 +338,27 @@ def get_resident_names():
 
 
 def insert_resident(name, date_of_birth, level_of_care):
-    """ Insert a new resident into the database. """
+    """ Insert a new resident into the database, with encryption for certain fields. """
+    encrypted_dob = encrypt_data(date_of_birth)  # Assuming encrypt_data is already defined
+    encrypted_level_of_care = encrypt_data(level_of_care)
+
     with sqlite3.connect('resident_data.db') as conn:
         cursor = conn.cursor()
-        # Adjusted SQL query to match the new table structure
         cursor.execute('INSERT INTO residents (name, date_of_birth, level_of_care) VALUES (?, ?, ?)', 
-                       (name, date_of_birth, level_of_care))
+                       (name, encrypted_dob, encrypted_level_of_care))
         conn.commit()
 
 
 def fetch_resident_information(resident_name):
+    """Fetch and decrypt a resident's information from the database."""
     with sqlite3.connect('resident_data.db') as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT name, date_of_birth FROM residents WHERE name = ?", (resident_name,))
         result = cursor.fetchone()
         if result:
-            return {'name': result[0], 'date_of_birth': result[1]}
+            name, encrypted_date_of_birth = result
+            decrypted_date_of_birth = decrypt_data(encrypted_date_of_birth)  # Assuming decrypt_data is already defined
+            return {'name': name, 'date_of_birth': decrypted_date_of_birth}
         else:
             return None
 
@@ -351,9 +409,13 @@ def fetch_medications_for_resident(resident_name):
 
         scheduled_medications = {}
         for med_name, dosage, instructions, time_slot in scheduled_results:
+            decrypted_med_name = decrypt_data(med_name)
+            decrypted_dosage = decrypt_data(dosage)
+            decrypted_instructions = decrypt_data(instructions)
             if time_slot not in scheduled_medications:
                 scheduled_medications[time_slot] = {}
-            scheduled_medications[time_slot][med_name] = {'dosage': dosage, 'instructions': instructions}
+            scheduled_medications[time_slot][decrypted_med_name] = {
+                'dosage': decrypted_dosage, 'instructions': decrypted_instructions}
 
         # Fetch PRN Medications
         cursor.execute("""
@@ -363,9 +425,12 @@ def fetch_medications_for_resident(resident_name):
         """, (resident_id,))
         prn_results = cursor.fetchall()
 
-        prn_medications = {med_name: {'dosage': dosage, 'instructions': instructions} for med_name, dosage, instructions in prn_results}
+        prn_medications = {
+            decrypt_data(med_name): {'dosage': decrypt_data(dosage), 'instructions': decrypt_data(instructions)} 
+            for med_name, dosage, instructions in prn_results
+        }
 
-     # Fetch Controlled Medications
+        # Fetch Controlled Medications
         cursor.execute("""
             SELECT medication_name, dosage, instructions, count, medication_form
             FROM medications 
@@ -373,12 +438,14 @@ def fetch_medications_for_resident(resident_name):
         """, (resident_id,))
         controlled_results = cursor.fetchall()
 
-        controlled_medications = {med_name: {'dosage': dosage, 'instructions': instructions, 'count': count, 'form': form} 
-                                  for med_name, dosage, instructions, count, form in controlled_results}
+        controlled_medications = {
+            decrypt_data(med_name): {'dosage': decrypt_data(dosage), 'instructions': decrypt_data(instructions), 'count': count, 'form': form} 
+            for med_name, dosage, instructions, count, form in controlled_results
+        }
 
-    # Combine the data into a single structure
-    medications_data = {'Scheduled': scheduled_medications, 'PRN': prn_medications, 'Controlled': controlled_medications}
-    return medications_data
+        # Combine the data into a single structure
+        medications_data = {'Scheduled': scheduled_medications, 'PRN': prn_medications, 'Controlled': controlled_medications}
+        return medications_data
 
 
 def insert_medication(resident_name, medication_name, dosage, instructions, medication_type, selected_time_slots, medication_form=None, count=None):
@@ -387,19 +454,25 @@ def insert_medication(resident_name, medication_name, dosage, instructions, medi
         with sqlite3.connect('resident_data.db') as conn:
             cursor = conn.cursor()
 
-            # Prepare values for insertion
-            values_to_insert = (resident_id, medication_name, dosage, instructions, medication_type)
+            # Encrypt PHI fields
+            encrypted_medication_name = encrypt_data(medication_name)
+            encrypted_dosage = encrypt_data(dosage)
+            encrypted_instructions = encrypt_data(instructions)
+
+            # Prepare values for insertion with encrypted data
+            values_to_insert = (resident_id, encrypted_medication_name, encrypted_dosage, encrypted_instructions, medication_type)
 
             # Prepare the SQL query based on medication type
             if medication_type == 'Controlled':
                 # For controlled medications, include medication form and count
                 sql_query = 'INSERT INTO medications (resident_id, medication_name, dosage, instructions, medication_type, medication_form, count) VALUES (?, ?, ?, ?, ?, ?, ?)'
+                # Assume medication_form and count are not considered PHI and do not need encryption
                 values_to_insert += (medication_form, count)
             else:
                 # For other medication types, use the default query
                 sql_query = 'INSERT INTO medications (resident_id, medication_name, dosage, instructions, medication_type) VALUES (?, ?, ?, ?, ?)'
 
-            # Insert medication details
+            # Insert medication details with encrypted PHI
             cursor.execute(sql_query, values_to_insert)
             medication_id = cursor.lastrowid
 
@@ -546,8 +619,9 @@ def fetch_discontinued_medications(resident_name):
         ''', (resident_id,))
 
         for medication_name, discontinued_date in cursor.fetchall():
+            decrypted_medication_name = decrypt_data(medication_name) if medication_name else medication_name
             if discontinued_date:  # Ensure there is a discontinuation date
-                discontinued_medications[medication_name] = discontinued_date
+                discontinued_medications[decrypted_medication_name] = discontinued_date
 
     return discontinued_medications
 
@@ -574,30 +648,37 @@ ADL_KEYS = [
 
 def fetch_adl_data_for_resident(resident_name):
     today = datetime.now().strftime("%Y-%m-%d")
+    resident_id = get_resident_id(resident_name)  # Ensure this function exists and correctly fetches the ID
+
     with sqlite3.connect('resident_data.db') as conn:
         cursor = conn.cursor()
+        # Adjust the query to use resident_id instead of resident_name
         cursor.execute('''
             SELECT * FROM adl_chart
-            WHERE resident_name = ? AND date = ?
-        ''', (resident_name, today))
+            WHERE resident_id = ? AND date = ?
+        ''', (resident_id, today))
         result = cursor.fetchone()
+        
         if result:
             # Convert the row to a dictionary
             columns = [col[0] for col in cursor.description]
-            return dict(zip(columns, result))
+            # Mapping each column to its value, excluding resident_id to maintain data abstraction
+            adl_data = {columns[i]: result[i] for i in range(1, len(columns))}  # Skipping index 0 assuming it's resident_id
+            return adl_data
         else:
             return {}
 
 
 def fetch_adl_chart_data_for_month(resident_name, year_month):
     # year_month should be in the format 'YYYY-MM'
+    resident_id = get_resident_id(resident_name)
     with sqlite3.connect('resident_data.db') as conn:
         cursor = conn.cursor()
         cursor.execute('''
             SELECT * FROM adl_chart
-            WHERE resident_name = ? AND strftime('%Y-%m', date) = ?
+            WHERE resident_id = ? AND strftime('%Y-%m', date) = ?
             ORDER BY date
-        ''', (resident_name, year_month))
+        ''', (resident_id, year_month))
         return cursor.fetchall()
 
 
@@ -612,11 +693,12 @@ def fetch_adl_data_for_resident_and_date(resident_name, date):
     Returns:
         dict: A dictionary containing ADL data for the resident and date.
     """
+    resident_id = get_resident_id(resident_name)
     with sqlite3.connect('resident_data.db') as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT * FROM adl_chart WHERE resident_name = ? AND date = ?
-        ''', (resident_name, date))
+            SELECT * FROM adl_chart WHERE resident_id = ? AND date = ?
+        ''', (resident_id, date))
         result = cursor.fetchone()
 
     if result:
@@ -654,17 +736,19 @@ def fetch_adl_data_for_resident_and_date(resident_name, date):
 
 
 def save_adl_data_from_management_window(resident_name, adl_data):
+    resident_id = get_resident_id(resident_name)
+
     with sqlite3.connect('resident_data.db') as conn:
         cursor = conn.cursor()
         # Construct the SQL statement with all the columns
         sql = '''
-            INSERT INTO adl_chart (resident_name, date, first_shift_sp, second_shift_sp, 
+            INSERT INTO adl_chart (resident_id, date, first_shift_sp, second_shift_sp, 
             first_shift_activity1, first_shift_activity2, first_shift_activity3, second_shift_activity4, 
             first_shift_bm, second_shift_bm, shower, shampoo, sponge_bath, peri_care_am, 
             peri_care_pm, oral_care_am, oral_care_pm, nail_care, skin_care, shave, 
             breakfast, lunch, dinner, snack_am, snack_pm, water_intake)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(resident_name, date) DO UPDATE SET
+            ON CONFLICT(resident_id, date) DO UPDATE SET
             first_shift_sp = excluded.first_shift_sp, second_shift_sp = excluded.second_shift_sp, 
             first_shift_activity1 = excluded.first_shift_activity1, first_shift_activity2 = excluded.first_shift_activity2,
             first_shift_activity3 = excluded.first_shift_activity3, second_shift_activity4 = excluded.second_shift_activity4,
@@ -677,7 +761,7 @@ def save_adl_data_from_management_window(resident_name, adl_data):
         '''
         
         data_tuple = (
-            resident_name,
+            resident_id, 
             datetime.now().strftime("%Y-%m-%d"),
             adl_data.get('first_shift_sp', ''),
             adl_data.get('second_shift_sp', ''),
@@ -707,8 +791,8 @@ def save_adl_data_from_management_window(resident_name, adl_data):
         cursor.execute(sql, data_tuple)
         conn.commit()
 
-
 def save_adl_data_from_chart_window(resident_name, year_month, window_values):
+    resident_id = get_resident_id(resident_name)
     with sqlite3.connect('resident_data.db') as conn:
         cursor = conn.cursor()
         # Define the number of days
@@ -724,13 +808,13 @@ def save_adl_data_from_chart_window(resident_name, year_month, window_values):
             
             # Prepare the SQL statement
             sql = '''
-                INSERT INTO adl_chart (resident_name, date, first_shift_sp, second_shift_sp, 
+                INSERT INTO adl_chart (resident_id, date, first_shift_sp, second_shift_sp, 
                 first_shift_activity1, first_shift_activity2, first_shift_activity3, second_shift_activity4, 
                 first_shift_bm, second_shift_bm, shower, shampoo, sponge_bath, peri_care_am, 
                 peri_care_pm, oral_care_am, oral_care_pm, nail_care, skin_care, shave, 
                 breakfast, lunch, dinner, snack_am, snack_pm, water_intake)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(resident_name, date) DO UPDATE SET
+                ON CONFLICT(resident_id, date) DO UPDATE SET
                 first_shift_sp = excluded.first_shift_sp, second_shift_sp = excluded.second_shift_sp, 
                 first_shift_activity1 = excluded.first_shift_activity1, first_shift_activity2 = excluded.first_shift_activity2,
                 first_shift_activity3 = excluded.first_shift_activity3, second_shift_activity4 = excluded.second_shift_activity4,
@@ -743,7 +827,7 @@ def save_adl_data_from_chart_window(resident_name, year_month, window_values):
             '''
             
             # Execute the SQL statement
-            cursor.execute(sql, (resident_name, date_str, *adl_data))
+            cursor.execute(sql, (resident_id, date_str, *adl_data))
             
         # Commit the changes to the database
         conn.commit()

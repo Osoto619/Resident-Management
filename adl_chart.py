@@ -1,7 +1,5 @@
 import PySimpleGUI as sg
-import sqlite3
 import calendar
-import datetime
 import db_functions
 
 

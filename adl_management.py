@@ -1,22 +1,13 @@
 import PySimpleGUI as sg
 from datetime import datetime
-import time
-import sqlite3
 from adl_chart import show_adl_chart
 import welcome_screen
 import db_functions
 
 
-def get_resident_care_level():
-    with sqlite3.connect('resident_data.db') as conn:
-        cursor = conn.cursor()
-        cursor.execute('SELECT name, level_of_care FROM residents')
-        return {name: level_of_care for name, level_of_care in cursor.fetchall()}
-
-
 def get_adl_tab_layout(resident_name):
     existing_data = db_functions.fetch_adl_data_for_resident(resident_name)
-    resident_care_levels = get_resident_care_level()
+    resident_care_levels = db_functions.get_resident_care_level()
     is_supervisory_care = resident_care_levels.get(resident_name, '') == 'Supervisory Care'
 
     # Fields to auto-populate for self-care residents

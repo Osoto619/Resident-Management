@@ -81,10 +81,10 @@ def initialize_database():
         FOREIGN KEY(medication_id) REFERENCES medications(id),
         UNIQUE(resident_id, medication_id, date, time_slot))''')
 
-    # Create table for ADL charts
+        # Create table for ADL charts
     c.execute('''CREATE TABLE IF NOT EXISTS adl_chart (
                 chart_id INTEGER PRIMARY KEY,
-                resident_name TEXT,
+                resident_id INTEGER,
                 date TEXT,
                 first_shift_sp TEXT,
                 second_shift_sp TEXT,
@@ -110,8 +110,8 @@ def initialize_database():
                 snack_am TEXT,
                 snack_pm TEXT,
                 water_intake TEXT,
-                FOREIGN KEY(resident_name) REFERENCES residents(name),
-                UNIQUE(resident_name, date))''')
-        
+                FOREIGN KEY(resident_id) REFERENCES residents(id),
+                UNIQUE(resident_id, date))''')
+
     conn.commit()
     conn.close()

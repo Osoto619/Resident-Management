@@ -1,4 +1,3 @@
-import sqlite3
 import PySimpleGUI as sg
 import resident_management
 import db_functions
@@ -7,6 +6,9 @@ from tkinter import font
 import sys
 import database_setup
 import config
+import secrets
+import string
+import pyperclip
 
 database_setup.initialize_database()
 
@@ -63,17 +65,9 @@ def enter_resident_info():
     window.close()
     
 
-def fetch_residents():
-    """ Fetches a list of resident names from the database. """
-    with sqlite3.connect('resident_data.db') as conn:
-        cursor = conn.cursor()
-        cursor.execute('SELECT name FROM residents')
-        return [row[0] for row in cursor.fetchall()]
-
-
 def enter_resident_removal():
     # Fetch the list of residents for the dropdown
-    residents = fetch_residents()
+    residents = db_functions.fetch_residents()
 
     # Define the layout for the removal window
     layout = [
@@ -186,40 +180,71 @@ def enter_resident_edit():
     window.close()
 
 
+def generate_strong_passphrase(length=15):
+    alphabet = string.ascii_letters + string.digits + string.punctuation
+    passphrase = ''.join(secrets.choice(alphabet) for i in range(length))
+    return passphrase
+
+
 def create_initial_admin_account_window():
+    passphrase = generate_strong_passphrase()
+
+    # Detailed instructions for setting environment variables
+    detailed_instructions = (
+        "Setting the Environment Variable\n\n"
+        "For Windows:\n"
+        "1. Open the Start Search, type in 'env', and choose 'Edit the system environment variables'.\n"
+        "2. In the System Properties window, click on the 'Environment Variables…' button.\n"
+        "3. In the Environment Variables window, click 'New…' under the 'System variables' section.\n"
+        "4. Set the variable name as RESIDENT_MGMT_DB_KEY and paste the passphrase in the variable value. Click OK.\n\n"
+        "For macOS and Linux:\n"
+        "1. Open a terminal window.\n"
+        "2. Enter the following command, replacing <passphrase> with the actual passphrase:\n"
+        "   echo 'export RESIDENT_MGMT_DB_KEY=\"<passphrase>\"' >> ~/.bash_profile\n"
+        "3. For the change to take effect, you might need to reload the profile with source ~/.bash_profile or simply restart the terminal."
+    )
+
     layout = [
-    [sg.Text('', expand_x=True), sg.Text("Welcome to CareTech Resident Management", font=(db_functions.get_user_font(), 18)), sg.Text('', expand_x=True)],
-    [sg.Text("Please Set up Administrator Account", font=(db_functions.get_user_font(), 16))],
-    [sg.Text("Username:", font=(db_functions.get_user_font(), 14)), sg.InputText(key='username',size=16, font=(db_functions.get_user_font(), 14))],
-    [sg.Text("Password:", font=(db_functions.get_user_font(), 16)), sg.InputText(key='password', password_char='*', size=16, font=(db_functions.get_user_font(), 14))],
-    [sg.Text("Initials:", font=(db_functions.get_user_font(), 16)), sg.InputText(key='initials', size=4, font=(db_functions.get_user_font(), 14))],
-    [sg.Button("Create Admin Account", font=(db_functions.get_user_font(),12)), sg.Button("Exit", font=(db_functions.get_user_font(),12))]
-]
+        [sg.Text('', expand_x=True), sg.Text("Welcome to CareTech Resident Management", font=(db_functions.get_user_font(), 18)), sg.Text('', expand_x=True)],
+        [sg.Text('', expand_x=True), sg.Text("Please set up the Administrator account", font=(db_functions.get_user_font(), 16)), sg.Text('', expand_x=True)],
+        [sg.Text('', expand_x=True), sg.Text("Username:", font=(db_functions.get_user_font(), 14)), sg.InputText(key='username', size=16, font=(db_functions.get_user_font(), 14)), sg.Text('', expand_x=True)],
+        [sg.Text('', expand_x=True), sg.Text("Password:", font=(db_functions.get_user_font(), 16)), sg.InputText(key='password', password_char='*', size=16, font=(db_functions.get_user_font(), 14)), sg.Text('', expand_x=True)],
+        [sg.Text('', expand_x=True), sg.Text("Initials:", font=(db_functions.get_user_font(), 16)), sg.InputText(key='initials', size=4, font=(db_functions.get_user_font(), 14)), sg.Text('', expand_x=True)],
+        [sg.Text("Database Passphrase (IMPORTANT - SAVE THIS!):", font=(db_functions.get_user_font(), 16)), sg.InputText(default_text=passphrase, size=15, readonly=True, font=(db_functions.get_user_font(), 14))],
+        [sg.Text("Copy the above passphrase and follow the detailed instructions below to set it as an environment variable on your system.", font=(db_functions.get_user_font(), 12))],
+        [sg.Text('', expand_x=True), sg.Multiline(default_text=detailed_instructions, size=(60, 20), font=(db_functions.get_user_font(), 10), no_scrollbar=True, disabled=True), sg.Text('', expand_x=True)],
+        [sg.Text('', expand_x=True), sg.Button("Copy Passphrase", font=(db_functions.get_user_font(), 12)), sg.Button("Create Admin Account", font=(db_functions.get_user_font(), 12)), sg.Button("Exit", font=(db_functions.get_user_font(), 12)), sg.Text('', expand_x=True)]
+    ]
 
     window = sg.Window("Admin Account Setup", layout)
 
     while True:
         event, values = window.read()
-        if event in (sg.WIN_CLOSED, "Exit"):
+        if event == sg.WIN_CLOSED or event == "Exit":
             sys.exit(0)
+        elif event == "Copy Passphrase":
+            # Copy passphrase to clipboard
+            pyperclip.copy(passphrase)
+            sg.popup("Passphrase copied to clipboard. Please save it securely and follow the instructions to set it as an environment variable.", title="Passphrase Copied")
         elif event == "Create Admin Account":
             username = values['username']
             password = values['password']
             initials = values['initials'].strip().upper()
-            # Validate input (e.g., non-empty, password strength, etc.)
             if not username or not password:
                 sg.popup("Username and password are required.", title="Error")
                 continue
-            # Create the admin account
+
+            # No longer need to collect db_passphrase as it's automatically set
             try:
+                # The initial database setup with passphrase should be done here
                 db_functions.create_admin_account(username, password, initials)
-                db_functions.log_action(username,'Initial Admin Creation', f'First Admin: {username}')
-                sg.popup("Admin account created successfully.")
+                sg.popup("Admin account created successfully. Please ensure the passphrase is securely stored and set as an environment variable.", title="Success")
                 break
             except Exception as e:
                 sg.popup(f"Error creating admin account: {e}", title="Error")
 
     window.close()
+
 
 
 def new_user_setup_window(username):
