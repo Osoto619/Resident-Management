@@ -92,7 +92,7 @@ def add_medication_window(resident_name):
             # Insert the new medication
             db_functions.insert_medication(resident_name, medication_name, dosage, instructions, medication_type, selected_time_slots, medication_form, medication_count)
             current_user = config.global_config['logged_in_user']
-            db_functions.log_action(current_user, 'New Medication', f'Medication Added {medication_name}, type {medication_type} by {current_user}')
+            db_functions.log_action(current_user, 'New Medication', f'Medication Added {medication_name}, type {medication_type} by {current_user} for resident {resident_name}')
             sg.popup('Medication Saved')
             window.close()
 

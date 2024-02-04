@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import calendar
 import bcrypt
@@ -8,6 +8,7 @@ import base64
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
 
 passphrase = os.environ.get('RESIDENT_MGMT_DB_KEY').encode()  # Convert to bytes
 
@@ -66,8 +67,60 @@ def log_action(username, action, description):
         cursor.execute('''
             INSERT INTO audit_logs (username, action, description, timestamp)
             VALUES (?, ?, ?, ?)
-        ''', (username, action, description, current_time))
+        ''', (username, action, encrypt_data(description), current_time))
         conn.commit()
+
+
+def fetch_audit_logs(last_10_days=False, username='', action='', date=''):
+    # Connect to the SQLite database
+    conn = sqlite3.connect('resident_data.db')
+    cursor = conn.cursor()
+    
+    # Start building the query
+    query = "SELECT timestamp, username, action, description FROM audit_logs WHERE 1=1"
+    params = []
+    
+    # Filter for the last 10 days
+    if last_10_days:
+        ten_days_ago = (datetime.now() - timedelta(days=10)).strftime('%Y-%m-%d')
+        query += " AND timestamp >= ?"
+        params.append(ten_days_ago)
+    
+    # Filter by username if provided
+    if username:
+        query += " AND username LIKE ?"
+        params.append(f"%{username}%")
+    
+    # Filter by action if provided
+    if action:
+        query += " AND action = ?"
+        params.append(action)
+    
+    # Filter by specific date if provided
+    if date:
+        query += " AND DATE(timestamp) = ?"
+        params.append(date)
+    
+    # Add ORDER BY clause to sort by timestamp in descending order
+    query += " ORDER BY timestamp DESC"
+
+    # Execute the query with the filters applied
+    cursor.execute(query, params)
+    
+    # Fetch all matching records
+    logs = cursor.fetchall()
+    
+    # Close the database connection
+    conn.close()
+    
+    # Decrypt the description in each log entry
+    decrypted_logs = []
+    for log in logs:
+        decrypted_description = fernet.decrypt(log[3].encode()).decode()
+        decrypted_logs.append({'date': log[0], 'username': log[1], 'action': log[2], 'description': decrypted_description})
+    
+    
+    return decrypted_logs
 
 
 def validate_login(username, password):
@@ -183,6 +236,52 @@ def create_admin_account(username, password, initials):
             VALUES (?, ?, ?, ?, ?)
         ''', (username, hashed_password, 'admin', initials, False))
 
+        conn.commit()
+
+
+def save_backup_configuration(backup_folder, backup_frequency):
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        # Check if a row exists
+        cursor.execute("SELECT id FROM backup_config WHERE id = 1")
+        exists = cursor.fetchone()
+        
+        if exists:
+            # Update if row exists
+            cursor.execute('''
+                UPDATE backup_config
+                SET backup_folder = ?, backup_frequency = ?
+                WHERE id = 1
+            ''', (backup_folder, backup_frequency))
+        else:
+            # Insert if no row exists
+            cursor.execute('''
+                INSERT INTO backup_config (id, backup_folder, backup_frequency)
+                VALUES (1, ?, ?)
+            ''', (backup_folder, backup_frequency))
+        
+        conn.commit()
+
+
+def get_backup_configuration():
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT backup_folder, backup_frequency, last_backup_date FROM backup_config WHERE id = 1")
+        config = cursor.fetchone()
+        if config:
+            # Parse the last_backup_date string to datetime.date
+            last_backup_date = datetime.strptime(config[2], "%Y-%m-%d").date()
+            return {'backup_folder': config[0], 'backup_frequency': config[1], 'last_backup_date': last_backup_date}
+        else:
+            return None
+
+
+def update_last_backup_date():
+    # Update the last backup date in the backup configuration
+    last_backup_date = datetime.now().strftime("%Y-%m-%d")
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE backup_config SET last_backup_date = ? WHERE id = 1", (last_backup_date,))
         conn.commit()
 
 

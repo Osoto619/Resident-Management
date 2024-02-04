@@ -16,6 +16,14 @@ def initialize_database():
         initials TEXT,
         is_temp_password BOOLEAN DEFAULT 1)''')
 
+    # Create table for data backup values
+    c.execute('''CREATE TABLE IF NOT EXISTS backup_config (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    backup_folder TEXT NOT NULL,
+    backup_frequency TEXT NOT NULL,
+    last_backup_date TEXT)''')
+
+    # Create audit_logs Table
     c.execute('''CREATE TABLE IF NOT EXISTS audit_logs (
         log_id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT,

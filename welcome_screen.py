@@ -1,7 +1,9 @@
 import PySimpleGUI as sg
 import resident_management
 import db_functions
-from datetime import datetime, timedelta
+import os
+import shutil
+from datetime import datetime, timedelta, date
 from tkinter import font
 import sys
 import database_setup
@@ -23,6 +25,75 @@ apply_user_theme()
 
 FONT = db_functions.get_user_font()
 FONT_BOLD = 'Arial Bold'
+
+def backup_configuration_window():
+    layout = [
+        [sg.Text("Backup Folder:"), sg.InputText(key='BackupFolder'), sg.FolderBrowse()],
+        [sg.Text("Backup Frequency:"), sg.Combo(['Daily', 'Weekly'], default_value='Weekly', key='BackupFrequency')],
+        [sg.Text("It's highly recommended to choose a backup location that is external to your computer, such as a cloud storage service or an external hard drive. This ensures that your data remains safe even in the event of hardware failure, theft, or other physical damages to your computer.", size=(60, 4))],
+        [sg.Button("Save"), sg.Button("Cancel")]
+    ]
+    
+    window = sg.Window("Backup Configuration", layout)
+    
+    while True:
+        event, values = window.read()
+        if event == sg.WINDOW_CLOSED or event == "Cancel":
+            break
+        elif event == "Save":
+            
+            db_functions.save_backup_configuration(values['BackupFolder'], values['BackupFrequency'])
+            sg.popup("Configuration Saved. Automatic backups will be performed accordingly.")
+            break
+
+    window.close()
+
+def is_backup_due():
+    backup_config = db_functions.get_backup_configuration()
+    if not backup_config:
+        return False
+
+    last_backup_date = backup_config['last_backup_date']
+    today = datetime.now().date()
+
+    if backup_config['backup_frequency'] == 'Daily' and (today - last_backup_date).days >= 1:
+        return True
+    elif backup_config['backup_frequency'] == 'Weekly' and (today - last_backup_date).days >= 7:
+        return True
+
+    return False
+
+
+def perform_backup():
+    # Retrieve backup configuration
+    backup_config = db_functions.get_backup_configuration()
+    if not backup_config:
+        print("Backup configuration not found.")
+        return
+    
+    backup_folder = backup_config['backup_folder']
+    database_path = 'resident_data.db'  # Path to your SQLite database
+    current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_filename = f"backup_{current_time}.db"
+    
+    # Construct the full path for the backup file
+    backup_path = os.path.join(backup_folder, backup_filename)
+    
+    try:
+        # Copy the database file to the backup folder
+        shutil.copyfile(database_path, backup_path)
+        print(f"Backup successful: {backup_path}")
+    except Exception as e:
+        print(f"Error during backup: {e}")
+
+def startup_routine():
+    if is_backup_due():
+        perform_backup()
+        db_functions.update_last_backup_date()
+    #     print("Backup performed successfully.")
+    # else:
+    #     print("No backup needed at this time.")
+
 
 def enter_resident_info():
     # Calculate the default date (85 years ago from today)
@@ -57,7 +128,7 @@ def enter_resident_info():
             level_of_care = 'Supervisory Care' if values['Supervisory_Care'] else 'Personal Care' if values['Personal_Care'] else 'Directed Care'
             db_functions.insert_resident(name, values['Date_of_Birth'], level_of_care)
             logged_in_user = config.global_config['logged_in_user']
-            db_functions.log_action(logged_in_user, 'Resident aded', f'Resident Added {name} by {logged_in_user}')
+            db_functions.log_action(logged_in_user, 'Resident Added', f'Resident Added {name} by {logged_in_user}')
             sg.popup('Resident information saved!')
             window.close()
             return True
@@ -343,7 +414,7 @@ def login_window():
             if db_functions.validate_login(username, password):
                 # Log the successful login action
                 config.global_config['logged_in_user'] = username
-                db_functions.log_action(username, "Login", f"{username} login")
+                db_functions.log_action(username, "Login", f"{username}")
                 if db_functions.needs_password_reset(username):
                     window.close()
                     new_user_setup_window(username)
@@ -359,7 +430,44 @@ def login_window():
 
     window.close()
     
+def audit_logs_window():
+    col_widths = [20, 15, 25, 65, 500] 
+    # Define the layout for the audit logs window
+    layout = [
+        [sg.Text('', expand_x=True), sg.Text('Admin Audit Logs', font=(db_functions.get_user_font, 23)), sg.Text('', expand_x=True)],
+        [sg.Text("Filter by Username:"), sg.InputText(key='-USERNAME_FILTER-', size=14)],
+        [sg.Text("Filter by Action:"), sg.Combo(['Login', 'Logout', 'Resident Added', 'User Created', 'New Medication'], key='-ACTION_FILTER-', readonly=True)],
+        [sg.Text("Filter by Date (YYYY-MM-DD):"), sg.InputText(key='-DATE_FILTER-', enable_events=True, size=10), sg.CalendarButton("Choose Date", target='-DATE_FILTER-', close_when_date_chosen=True, format='%Y-%m-%d')],
+        [sg.Button("Apply Filters"), sg.Button("Reset Filters")],
+        [sg.Table(headings=['Date', 'Username', 'Action', 'Description'], values=[], key='-AUDIT_LOGS_TABLE-', auto_size_columns=False, display_row_numbers=True, num_rows=20, col_widths=col_widths)],
+        [sg.Button("Close")]
+    ]
 
+    window = sg.Window("Audit Logs", layout, finalize=True)
+
+    # Function to load audit logs
+    def load_audit_logs(username_filter='', action_filter='', date_filter=''):
+        # Fetch audit logs from the database with the given filters
+        logs = db_functions.fetch_audit_logs(last_10_days=True, username=username_filter, action=action_filter, date=date_filter)
+        # Update the table with the fetched logs
+        window['-AUDIT_LOGS_TABLE-'].update(values=[[log['date'], log['username'], log['action'], log['description']] for log in logs])
+
+    # Initial loading of logs
+    load_audit_logs()
+
+    while True:
+        event, values = window.read()
+        if event == sg.WINDOW_CLOSED or event == "Close":
+            break
+        elif event == "Apply Filters":
+            load_audit_logs(username_filter=values['-USERNAME_FILTER-'], action_filter=values['-ACTION_FILTER-'], date_filter=values['-DATE_FILTER-'])
+        elif event == "Reset Filters":
+            window['-USERNAME_FILTER-'].update('')
+            window['-ACTION_FILTER-'].update('')
+            window['-DATE_FILTER-'].update('')
+            load_audit_logs()  # Reload logs without filters
+
+    window.close()
 
 def display_welcome_window(num_of_residents_local, show_login=False):
     
@@ -380,7 +488,8 @@ def display_welcome_window(num_of_residents_local, show_login=False):
         sg.Button('Remove Resident', pad=(6, 3), font=(FONT, 12)),
         sg.Button('Edit Resident', pad=(6, 3), font=(FONT, 12))],
         [sg.Text('', expand_x=True), sg.Button('Add User', pad=(6, 3), font=(FONT, 12)),
-        sg.Button('Remove User', pad=(6, 3), font=(FONT, 12)), sg.Text('', expand_x=True)]
+        sg.Button('Remove User', pad=(6, 3), font=(FONT, 12)), sg.Text('', expand_x=True)],
+        [sg.Text('', expand_x=True), sg.Button('View Audit Logs', font=(FONT, 12)), sg.Button('Data Backup Setup', font=(FONT, 12 )), sg.Text('', expand_x=True)]
     ]
     admin_panel = sg.Frame('Admin Panel', admin_panel_layout, font=(FONT, 14), visible=db_functions.is_admin(config.global_config['logged_in_user']))
 
@@ -430,14 +539,23 @@ def display_welcome_window(num_of_residents_local, show_login=False):
             window.close()
             add_user_window()
             display_welcome_window(db_functions.get_resident_count())
-
-    
+        elif event == 'View Audit Logs':
+            window.hide()
+            audit_logs_window()
+            window.un_hide()
+        elif event == 'Data Backup Setup':
+            window.hide()
+            backup_configuration_window()
+            startup_routine()
+            window.un_hide()
+            
     db_functions.log_action(logged_in_user, 'Logout', f'{logged_in_user} logout')
     config.global_config['logged_in_user'] = None
     window.close()
 
 
 if __name__ == "__main__":
+    startup_routine()
     display_welcome_window(db_functions.get_resident_count(), show_login=True)
 
 
