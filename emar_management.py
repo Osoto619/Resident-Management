@@ -47,9 +47,9 @@ def add_medication_window(resident_name):
                 window['Measurement Unit'].update(visible=False)
                 window['Count Text'].update(visible=False)
         elif event == 'Submit':
-            medication_name = values['Medication Name']
+            medication_name = values['Medication Name'].title()
             dosage = values['Dosage']
-            instructions = values['Instructions']
+            instructions = values['Instructions'].upper()
             medication_type = values['Medication Type']
 
             # Check if instructions are provided for PRN and Controlled medications
@@ -92,7 +92,7 @@ def add_medication_window(resident_name):
             # Insert the new medication
             db_functions.insert_medication(resident_name, medication_name, dosage, instructions, medication_type, selected_time_slots, medication_form, medication_count)
             current_user = config.global_config['logged_in_user']
-            db_functions.log_action(current_user, 'New Medication', f'Medication Added {medication_name}, type {medication_type} by {current_user} for resident {resident_name}')
+            db_functions.log_action(current_user, 'New Medication', f'Medication Added {medication_name}, type {medication_type} for resident {resident_name}')
             sg.popup('Medication Saved')
             window.close()
 
@@ -112,16 +112,16 @@ def get_medication_list(medication_data):
 
 def edit_medication_window(selected_resident):
     resident_id = db_functions.get_resident_id(selected_resident)
-    medication_names = db_functions.fetch_medications_for_resident(selected_resident)
-    med_list = get_medication_list(medication_names)
-
-
+    medication_names = db_functions.fetch_medications_for_resident(selected_resident)['Scheduled']  # Assuming this returns a dict with 'Scheduled' medications
+    med_list = [med_name for timeslot, meds in medication_names.items() for med_name in meds]  # Adjust based on your structure
+    unique_med_list = set(med_list)
+    med_list = list(unique_med_list)
     layout = [
         [sg.Text('Select Medication:'), sg.Combo(med_list, key='-MEDICATION-', readonly=True)],
         [sg.Text('New Medication Name:'), sg.InputText(key='-NEW_MED_NAME-')],
         [sg.Text('New Dosage:'), sg.InputText(key='-NEW_DOSAGE-')],
         [sg.Text('New Instructions:'), sg.InputText(key='-NEW_INSTRUCTIONS-')],
-        [sg.Button('Update'), sg.Button('Cancel')]
+        [sg.Button('Update'), sg.Button('Remove'), sg.Button('Cancel')]
     ]
 
     window = sg.Window('Edit Medication Details', layout)
@@ -133,12 +133,20 @@ def edit_medication_window(selected_resident):
         elif event == 'Update':
             # Fetch current medication details
             current_details = db_functions.fetch_medication_details(values['-MEDICATION-'], resident_id)
+            med_name = values['-MEDICATION-']
             if current_details:
                 # Update medication details
                 db_functions.update_medication_details(values['-MEDICATION-'], resident_id, values['-NEW_MED_NAME-'].strip(), values['-NEW_DOSAGE-'].strip(), values['-NEW_INSTRUCTIONS-'].strip())
+                db_functions.log_action(config.global_config['logged_in_user'], 'Medication Typo Correction', f'Typos fixes for {med_name}')
                 sg.popup('Medication details updated')
             else:
                 sg.popup('Medication not found')
+            break
+        elif event == 'Remove':
+            # Confirm removal
+            if sg.popup_yes_no('Are you sure you want to remove this medication?') == 'Yes':
+                db_functions.remove_medication(values['-MEDICATION-'], selected_resident)
+                sg.popup('Medication removed successfully')
             break
 
     window.close()
@@ -158,7 +166,7 @@ def compare_emar_data_and_log_changes(user_input_data, resident_name, date):
             changes_made.append(f"Administered {entry['medication_name']} at {entry['time_slot']}: {entry['administered']}")
 
     # Construct the audit log description
-    audit_description = f"eMAR changes for {resident_name} on {date}: " + "; ".join(changes_made)
+    audit_description = f"eMAR changes for {resident_name}: " + "; ".join(changes_made)
     return audit_description
 
 
@@ -419,9 +427,9 @@ def get_emar_tab_layout(resident_name):
     bottom_layout = [
         [sg.Text('', expand_x=True), sg.Button('Save', key='-EMAR_SAVE-', font=(welcome_screen.FONT, 11), disabled=all_administered), 
          sg.Button('Add Medication', key='-ADD_MEDICATION-', font=(welcome_screen.FONT, 11), visible=db_functions.is_admin(logged_in_user)), 
-         sg.Button('Edit Medication', key='-EDIT_MEDICATION-', font=(welcome_screen.FONT, 11)), sg.Button("Discontinue Medication", key='-DC_MEDICATION-' , font=(welcome_screen.FONT, 11)), 
+         sg.Button('Edit Medication', key='-EDIT_MEDICATION-', font=(welcome_screen.FONT, 11), visible=db_functions.is_admin(config.global_config['logged_in_user'])), sg.Button("Discontinue Medication", key='-DC_MEDICATION-' , font=(welcome_screen.FONT, 11), visible=db_functions.is_admin(config.global_config['logged_in_user'])), 
          sg.Text('', expand_x=True)],
-        [sg.Text('', expand_x=True), sg.Button('View/Edit Current Month eMARS Chart', key='CURRENT_EMAR_CHART', font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
+        [sg.Text('', expand_x=True), sg.Button('View Current Month eMARS Chart', key='CURRENT_EMAR_CHART', font=(welcome_screen.FONT, 11)), sg.Button('Generate Medication List', key='-MED_LIST-', font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
         [sg.Text('', expand_x=True), sg.Text('Or Search by Month and Year', font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
         [sg.Text(text="", expand_x=True), sg.Text(text="Enter Month: (MM)", font=(welcome_screen.FONT, 11)), sg.InputText(size=4, key="-EMAR_MONTH-"), sg.Text("Enter Year: (YYYY)", font=(welcome_screen.FONT, 11)), sg.InputText(size=5, key='-EMAR_YEAR-'), sg.Button("Search", key='-EMAR_SEARCH-', font=(welcome_screen.FONT, 11)), sg.Text(text="", expand_x=True)]
     ]

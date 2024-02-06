@@ -8,6 +8,7 @@ from adl_chart import show_adl_chart
 from emars_chart import show_emar_chart
 import welcome_screen
 import config
+import med_lists
 
 
 def create_tab_layout(resident_name):
@@ -151,7 +152,6 @@ def main():
         elif event == '-CURRENT_ADL_CHART-':
             # Get the current month and year
             current_month_year = datetime.now().strftime("%Y-%m")
-
             window.hide()
             # Call the show_adl_chart function with the selected resident and current month-year
             adl_management.show_adl_chart(selected_resident, current_month_year)
@@ -169,6 +169,9 @@ def main():
             window.hide()
             show_emar_chart(selected_resident,current_month_year)
             window.un_hide()
+        elif event == '-MED_LIST-':
+            medication_data = db_functions.fetch_medications_for_resident(selected_resident)
+            med_lists.create_medication_list_pdf(selected_resident, medication_data)
         elif event == '-ADL_SEARCH-':
             # year_month should be in the format 'YYYY-MM'
             month = values['-ADL_MONTH-'].zfill(2)
@@ -194,7 +197,7 @@ def main():
                 sg.popup("No eMARs Chart Data Found for the Specified Month and Resident")
         elif event == '-ADD_MEDICATION-':
             window.close()
-            add_med_win = emar_management.add_medication_window(selected_resident)
+            emar_management.add_medication_window(selected_resident)
             window = create_management_window(resident_names,selected_resident, default_tab_index=1)
         elif event == '-EDIT_MEDICATION-':
             window.close()

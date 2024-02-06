@@ -8,9 +8,18 @@ import base64
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+import config
 
-
-passphrase = os.environ.get('RESIDENT_MGMT_DB_KEY').encode()  # Convert to bytes
+#passphrase = os.environ.get('RESIDENT_MGMT_DB_KEY').encode()  # Convert to bytes
+# Only attempt to encode if the environment variable is found
+passphrase_env_var = os.environ.get('RESIDENT_MGMT_DB_KEY')
+if passphrase_env_var is not None:
+    passphrase = passphrase_env_var.encode()
+else:
+    # Handle the case where the environment variable is not set
+    print("Warning: 'RESIDENT_MGMT_DB_KEY' environment variable not found.")
+    passphrase = None  # or set a default value, or raise an exception
+ 
 
 salt = b'\x00'*16  # Use a fixed salt; TO BE CHANGED TO BE RANDOM
 
@@ -26,17 +35,12 @@ key = base64.urlsafe_b64encode(kdf.derive(passphrase))
 fernet = Fernet(key)
 
 
-
 def encrypt_data(data):
-    return fernet.encrypt(data.encode()).decode()  # Encrypt and convert back to string
+    return fernet.encrypt(data.encode()).decode()
 
 def decrypt_data(data):
     return fernet.decrypt(data.encode()).decode()  # Decrypt and convert back to string
 
-# resident_name = 'Dirty Diana'
-# encrypted_name = encrypt_data(resident_name)
-# print(encrypted_name)
-# print(decrypt_data(encrypted_name))
 
 def fetch_residents():
     """ Fetches a list of resident names from the database. """
@@ -322,6 +326,26 @@ def create_user(username, password, role='User', is_temp_password=True, initials
         conn.commit()
 
 
+def get_all_usernames():
+    conn = sqlite3.connect('resident_data.db')
+    c = conn.cursor()
+    c.execute("SELECT username FROM users")
+    usernames = [row[0] for row in c.fetchall()]
+    conn.close()
+    return usernames
+
+
+def remove_user(username):
+    conn = sqlite3.connect('resident_data.db')
+    c = conn.cursor() 
+
+    # Delete the user from the users table
+    c.execute("DELETE FROM users WHERE username = ?", (username,))
+
+    conn.commit()
+    conn.close()
+
+
 def is_admin(username):
     """
     Check if the given user is an admin.
@@ -508,12 +532,11 @@ def fetch_medications_for_resident(resident_name):
 
         scheduled_medications = {}
         for med_name, dosage, instructions, time_slot in scheduled_results:
-            decrypted_med_name = decrypt_data(med_name)
             decrypted_dosage = decrypt_data(dosage)
             decrypted_instructions = decrypt_data(instructions)
             if time_slot not in scheduled_medications:
                 scheduled_medications[time_slot] = {}
-            scheduled_medications[time_slot][decrypted_med_name] = {
+            scheduled_medications[time_slot][med_name] = {
                 'dosage': decrypted_dosage, 'instructions': decrypted_instructions}
 
         # Fetch PRN Medications
@@ -524,10 +547,8 @@ def fetch_medications_for_resident(resident_name):
         """, (resident_id,))
         prn_results = cursor.fetchall()
 
-        prn_medications = {
-            decrypt_data(med_name): {'dosage': decrypt_data(dosage), 'instructions': decrypt_data(instructions)} 
-            for med_name, dosage, instructions in prn_results
-        }
+        prn_medications = {med_name: {'dosage': decrypt_data(dosage), 'instructions': decrypt_data(instructions)} 
+            for med_name, dosage, instructions in prn_results}
 
         # Fetch Controlled Medications
         cursor.execute("""
@@ -537,10 +558,8 @@ def fetch_medications_for_resident(resident_name):
         """, (resident_id,))
         controlled_results = cursor.fetchall()
 
-        controlled_medications = {
-            decrypt_data(med_name): {'dosage': decrypt_data(dosage), 'instructions': decrypt_data(instructions), 'count': count, 'form': form} 
-            for med_name, dosage, instructions, count, form in controlled_results
-        }
+        controlled_medications = {med_name: {'dosage': decrypt_data(dosage), 'instructions': decrypt_data(instructions), 'count': count, 'form': form} 
+            for med_name, dosage, instructions, count, form in controlled_results}
 
         # Combine the data into a single structure
         medications_data = {'Scheduled': scheduled_medications, 'PRN': prn_medications, 'Controlled': controlled_medications}
@@ -554,12 +573,11 @@ def insert_medication(resident_name, medication_name, dosage, instructions, medi
             cursor = conn.cursor()
 
             # Encrypt PHI fields
-            encrypted_medication_name = encrypt_data(medication_name)
             encrypted_dosage = encrypt_data(dosage)
             encrypted_instructions = encrypt_data(instructions)
 
             # Prepare values for insertion with encrypted data
-            values_to_insert = (resident_id, encrypted_medication_name, encrypted_dosage, encrypted_instructions, medication_type)
+            values_to_insert = (resident_id, medication_name, encrypted_dosage, encrypted_instructions, medication_type)
 
             # Prepare the SQL query based on medication type
             if medication_type == 'Controlled':
@@ -584,6 +602,43 @@ def insert_medication(resident_name, medication_name, dosage, instructions, medi
             
             conn.commit()
 
+def remove_medication(medication_name, resident_name):
+    resident_id = get_resident_id(resident_name)
+    # Connect to the database
+    conn = sqlite3.connect('resident_data.db')
+    c = conn.cursor()
+
+    try:
+        # Start a transaction
+        conn.execute('BEGIN')
+
+        # Get the medication ID
+        c.execute('SELECT id FROM medications WHERE medication_name = ? AND resident_id = ?', (medication_name, resident_id))
+        medication_id = c.fetchone()
+        if medication_id:
+            medication_id = medication_id[0]
+
+            # Delete related entries from medication_time_slots
+            c.execute('DELETE FROM medication_time_slots WHERE medication_id = ?', (medication_id,))
+
+            # Delete related entries from emar_chart
+            c.execute('DELETE FROM emar_chart WHERE medication_id = ?', (medication_id,))
+
+            # Finally, delete the medication itself
+            c.execute('DELETE FROM medications WHERE id = ?', (medication_id,))
+
+        # Commit the transaction
+        conn.commit()
+        log_action(config.global_config['logged_in_user'], 'Medication Deleted', f'{medication_name} removed')
+        print(f"Medication '{medication_name}' and all related data successfully removed.")
+    except Exception as e:
+        # Rollback in case of error
+        conn.rollback()
+        print(f"Error removing medication: {e}")
+    finally:
+        # Close the connection
+        conn.close()
+
 
 def fetch_medication_details(medication_name, resident_id):
     with sqlite3.connect('resident_data.db') as conn:
@@ -598,8 +653,10 @@ def fetch_medication_details(medication_name, resident_id):
 
 def update_medication_details(old_name, resident_id, new_name, new_dosage, new_instructions):
     with sqlite3.connect('resident_data.db') as conn:
+        encrypted_new_dosage = encrypt_data(new_dosage)
+        encrypted_new_instructions = encrypt_data(new_instructions)
         cursor = conn.cursor()
-        cursor.execute("UPDATE medications SET medication_name = ?, dosage = ?, instructions = ? WHERE medication_name = ? AND resident_id = ?", (new_name, new_dosage, new_instructions, old_name, resident_id))
+        cursor.execute("UPDATE medications SET medication_name = ?, dosage = ?, instructions = ? WHERE medication_name = ? AND resident_id = ?", (new_name, encrypted_new_dosage, encrypted_new_instructions, old_name, resident_id))
         conn.commit()
 
 
@@ -997,26 +1054,27 @@ def save_emar_data_from_management_window(emar_data):
         cursor = conn.cursor()
 
         for entry in emar_data:
-            # Fetch medication_id based on resident_id and medication_name
-            cursor.execute('''
-                SELECT m.id FROM medications m
-                JOIN residents r ON m.resident_id = r.id
-                WHERE m.medication_name = ? AND r.name = ?
-            ''', (entry['medication_name'], entry['resident_name']))
+            # Fetch the resident_id
+            cursor.execute("SELECT id FROM residents WHERE name = ?", (entry['resident_name'],))
+            resident_id_result = cursor.fetchone()
+            if resident_id_result is None:
+                continue  # Skip if resident not found
+            resident_id = resident_id_result[0]
+
+            # Fetch medication_id based on resident_id and unencrypted medication_name
+            cursor.execute("SELECT id FROM medications WHERE resident_id = ? AND medication_name = ?", (resident_id, entry['medication_name']))
             medication_id_result = cursor.fetchone()
+            if medication_id_result is None:
+                continue  # Skip if medication not found
+            medication_id = medication_id_result[0]
 
-            if medication_id_result:
-                medication_id = medication_id_result[0]
-
-                # Insert or update emar_chart data
-                cursor.execute('''
-                    INSERT INTO emar_chart (resident_id, medication_id, date, time_slot, administered)
-                    SELECT r.id, ?, ?, ?, ?
-                    FROM residents r
-                    WHERE r.name = ?
-                    ON CONFLICT(resident_id, medication_id, date, time_slot) DO UPDATE SET
-                    administered = excluded.administered
-                ''', (medication_id, entry['date'], entry['time_slot'], entry['administered'], entry['resident_name']))
+            # Insert or update emar_chart data
+            cursor.execute('''
+                INSERT INTO emar_chart (resident_id, medication_id, date, time_slot, administered)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(resident_id, medication_id, date, time_slot) 
+                DO UPDATE SET administered = excluded.administered
+            ''', (resident_id, medication_id, entry['date'], entry['time_slot'], entry['administered']))
 
         conn.commit()
 
@@ -1169,3 +1227,4 @@ def does_emars_chart_data_exist(resident_name, year_month):
             )
         ''', (resident_name, year_month))
         return cursor.fetchone()[0] == 1
+

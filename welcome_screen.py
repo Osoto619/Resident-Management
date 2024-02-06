@@ -128,7 +128,7 @@ def enter_resident_info():
             level_of_care = 'Supervisory Care' if values['Supervisory_Care'] else 'Personal Care' if values['Personal_Care'] else 'Directed Care'
             db_functions.insert_resident(name, values['Date_of_Birth'], level_of_care)
             logged_in_user = config.global_config['logged_in_user']
-            db_functions.log_action(logged_in_user, 'Resident Added', f'Resident Added {name} by {logged_in_user}')
+            db_functions.log_action(logged_in_user, 'Resident Added', f'Resident Added {name}')
             sg.popup('Resident information saved!')
             window.close()
             return True
@@ -240,9 +240,11 @@ def enter_resident_edit():
         elif event == 'Update':
             # Fetch current information
             current_info = db_functions.fetch_resident_information(values['-RESIDENT-'])
+            resident_name = values['-RESIDENT-']
             if current_info:
                 # Update information
                 db_functions.update_resident_info(values['-RESIDENT-'], values['-NEW_NAME-'].strip(), values['-NEW_DOB-'].strip())
+                db_functions.log_action(config.global_config['logged_in_user'], 'Fixed Resident Typo(s)', f'fixed typos for {resident_name}')
                 sg.popup('Resident information updated')
             else:
                 sg.popup('Resident not found')
@@ -389,6 +391,44 @@ def add_user_window():
 
     window.close()
 
+def remove_user_window():
+    # Fetch usernames for the dropdown
+    usernames = db_functions.get_all_usernames()
+
+    layout = [
+        [sg.Text("Select User:"), sg.Combo(usernames, key='-USERNAME-')],
+        [sg.Text("Reason for Removal:"), sg.InputText(key='-REASON-')],
+        [sg.Button("Remove User"), sg.Button("Cancel")]
+    ]
+
+    window = sg.Window("Remove User", layout)
+
+    while True:
+        event, values = window.read()
+        if event == sg.WIN_CLOSED or event == "Cancel":
+            break
+        elif event == "Remove User":
+            username = values['-USERNAME-']
+            reason = values['-REASON-'].strip()
+
+            if not username or not reason:
+                sg.popup_error("Both username and reason for removal are required.")
+                continue
+            
+            # Confirmation popup
+            confirm = sg.popup_yes_no(f"Are you sure you want to remove '{username}'?", title="Confirm Removal")
+            if confirm == "Yes":
+                try:
+                    db_functions.remove_user(username) 
+                    db_functions.log_action(config.global_config['logged_in_user'], 'User Removal', f"User '{username}' removed. Reason: {reason}")
+                    sg.popup(f"User '{username}' has been removed successfully.")
+                    break
+                except Exception as e:
+                    sg.popup_error(f"Error removing user: {e}")
+            else:
+                sg.popup("User removal cancelled.")
+
+    window.close()
 
 def login_window():
     
@@ -431,15 +471,15 @@ def login_window():
     window.close()
     
 def audit_logs_window():
-    col_widths = [20, 15, 25, 65, 500] 
+    col_widths = [20, 15, 30, 65]  # Adjusted for readability
     # Define the layout for the audit logs window
     layout = [
-        [sg.Text('', expand_x=True), sg.Text('Admin Audit Logs', font=(db_functions.get_user_font, 23)), sg.Text('', expand_x=True)],
+        [sg.Text('', expand_x=True), sg.Text('Admin Audit Logs', font=(db_functions.get_user_font(), 23)), sg.Text('', expand_x=True)],
         [sg.Text("Filter by Username:"), sg.InputText(key='-USERNAME_FILTER-', size=14)],
         [sg.Text("Filter by Action:"), sg.Combo(['Login', 'Logout', 'Resident Added', 'User Created', 'New Medication'], key='-ACTION_FILTER-', readonly=True)],
         [sg.Text("Filter by Date (YYYY-MM-DD):"), sg.InputText(key='-DATE_FILTER-', enable_events=True, size=10), sg.CalendarButton("Choose Date", target='-DATE_FILTER-', close_when_date_chosen=True, format='%Y-%m-%d')],
         [sg.Button("Apply Filters"), sg.Button("Reset Filters")],
-        [sg.Table(headings=['Date', 'Username', 'Action', 'Description'], values=[], key='-AUDIT_LOGS_TABLE-', auto_size_columns=False, display_row_numbers=True, num_rows=20, col_widths=col_widths)],
+        [sg.Table(headings=['Date', 'Username', 'Action', 'Description'], values=[], key='-AUDIT_LOGS_TABLE-', auto_size_columns=False, display_row_numbers=True, num_rows=20, col_widths=col_widths, enable_click_events=True, select_mode=sg.TABLE_SELECT_MODE_BROWSE)],
         [sg.Button("Close")]
     ]
 
@@ -447,32 +487,39 @@ def audit_logs_window():
 
     # Function to load audit logs
     def load_audit_logs(username_filter='', action_filter='', date_filter=''):
-        # Fetch audit logs from the database with the given filters
         logs = db_functions.fetch_audit_logs(last_10_days=True, username=username_filter, action=action_filter, date=date_filter)
-        # Update the table with the fetched logs
+        table_data = [[log['date'], log['username'], log['action'], log['description']] for log in logs]
         window['-AUDIT_LOGS_TABLE-'].update(values=[[log['date'], log['username'], log['action'], log['description']] for log in logs])
+        return table_data
 
-    # Initial loading of logs
-    load_audit_logs()
+    original_table_data = load_audit_logs()  # Initial loading of logs
 
     while True:
         event, values = window.read()
         if event == sg.WINDOW_CLOSED or event == "Close":
             break
+        elif event[0] == '-AUDIT_LOGS_TABLE-' and event[1] == '+CLICKED+':
+            row_index = event[2][0]  # Get the row index from the event tuple.
+            # Access the clicked row's data using the row_index from your original dataset.
+            clicked_row_data = original_table_data[row_index]
+            description = clicked_row_data[3]  # Assuming the description is in the fourth column.
+            sg.popup_scrolled(description, title='Detailed Description', size=(50, 10))
         elif event == "Apply Filters":
-            load_audit_logs(username_filter=values['-USERNAME_FILTER-'], action_filter=values['-ACTION_FILTER-'], date_filter=values['-DATE_FILTER-'])
+            original_table_data = load_audit_logs(username_filter=values['-USERNAME_FILTER-'], action_filter=values['-ACTION_FILTER-'], date_filter=values['-DATE_FILTER-'])
         elif event == "Reset Filters":
             window['-USERNAME_FILTER-'].update('')
             window['-ACTION_FILTER-'].update('')
             window['-DATE_FILTER-'].update('')
-            load_audit_logs()  # Reload logs without filters
+            original_table_data = load_audit_logs()  # Reload logs without filters
 
     window.close()
+
 
 def display_welcome_window(num_of_residents_local, show_login=False):
     
     if db_functions.is_first_time_setup():
         create_initial_admin_account_window()
+        
 
     if show_login:
         login_window()
@@ -539,6 +586,10 @@ def display_welcome_window(num_of_residents_local, show_login=False):
             window.close()
             add_user_window()
             display_welcome_window(db_functions.get_resident_count())
+        elif event == 'Remove User':
+            window.hide
+            remove_user_window()
+            window.un_hide()
         elif event == 'View Audit Logs':
             window.hide()
             audit_logs_window()
@@ -553,9 +604,6 @@ def display_welcome_window(num_of_residents_local, show_login=False):
     config.global_config['logged_in_user'] = None
     window.close()
 
-
 if __name__ == "__main__":
     startup_routine()
     display_welcome_window(db_functions.get_resident_count(), show_login=True)
-
-
