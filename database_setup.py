@@ -108,6 +108,7 @@ def initialize_database():
                 resident_id INTEGER,
                 administration_date DATE,
                 notes TEXT DEFAULT '',
+                initials TEXT,
                 FOREIGN KEY(order_id) REFERENCES non_medication_orders(order_id),
                 FOREIGN KEY(resident_id) REFERENCES residents(id))''')
     

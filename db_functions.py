@@ -851,6 +851,82 @@ def save_non_medication_order(resident_id, order_name, frequency, specific_days,
         conn.commit()
 
 
+def update_non_med_order_details(order_name, resident_id, new_order_name, new_instructions):
+    """
+    Updates the details of a non-medication order for a specific resident.
+    
+    Parameters:
+        order_name (str): The current name of the order.
+        resident_id (int): The ID of the resident to whom the order belongs.
+        new_order_name (str): The new name for the order.
+        new_instructions (str): The new special instructions for the order.
+    """
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+
+        # Prepare the SQL statement for updating the order details.
+        # This statement updates the order's name and special instructions
+        # only if the new values are provided (not empty).
+        sql = """
+        UPDATE non_medication_orders
+        SET order_name = COALESCE(NULLIF(?, ''), order_name),
+            special_instructions = COALESCE(NULLIF(?, ''), special_instructions)
+        WHERE order_name = ? AND resident_id = ?
+        """
+
+        # Execute the SQL statement with the new values and the original order name and resident ID.
+        cursor.execute(sql, (new_order_name, new_instructions, order_name, resident_id))
+        
+        # Commit the transaction to save changes.
+        conn.commit()
+        
+        if cursor.rowcount == 0:
+            # If no rows were updated, it could mean the order name/resident ID didn't match.
+            print("No order was updated. Please check the order name and resident ID.")
+        else:
+            log_action(config.global_config['logged_in_user'], 'Non-Medication Order Updated', f'{order_name} updated for {resident_id}')
+
+
+def remove_non_med_order(order_name, resident_name):
+    """
+    Removes a non-medication order for a specific resident.
+    
+    Parameters:
+        order_name (str): The name of the non-medication order to be removed.
+        resident_name (str): The name of the resident from whom the order is to be removed.
+    """
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+
+        # First, get the resident ID for the given resident name to ensure accuracy
+        cursor.execute("SELECT id FROM residents WHERE name = ?", (resident_name,))
+        resident_result = cursor.fetchone()
+        
+        if resident_result is None:
+            print(f"No resident found with the name {resident_name}.")
+            return
+
+        resident_id = resident_result[0]
+
+        # Prepare the SQL statement for deleting the non-medication order
+        sql = """
+        DELETE FROM non_medication_orders
+        WHERE order_name = ? AND resident_id = ?
+        """
+
+        # Execute the SQL statement with the order name and resident ID
+        cursor.execute(sql, (order_name, resident_id))
+        
+        # Commit the transaction to save changes
+        conn.commit()
+        
+        if cursor.rowcount == 0:
+            # If no rows were deleted, it means the order name/resident ID didn't match any record
+            print("No non-medication order was removed. Please check the order name and resident name.")
+        else:
+            log_action(config.global_config['logged_in_user'], 'Non-Medication Order Removed', f'{order_name} removed for {resident_name}')
+
+
 def fetch_all_non_medication_orders_for_resident(resident_name):
     with sqlite3.connect('resident_data.db') as conn:
         cursor = conn.cursor()
@@ -936,7 +1012,7 @@ def record_non_med_order_performance(order_name, resident_id, notes, user_initia
         ''', (current_date, order_id))
 
         conn.commit()
-        print("Non-medication order performance recorded successfully.")
+        log_action(config.global_config['logged_in_user'], 'Non-Medication Order Administered', f'{order_name} administered for {resident_id}')
 
 
 def does_adl_chart_data_exist(resident_name, year_month):
@@ -1103,6 +1179,7 @@ def save_adl_data_from_management_window(resident_name, adl_data):
         )
         cursor.execute(sql, data_tuple)
         conn.commit()
+
 
 def save_adl_data_from_chart_window(resident_name, year_month, window_values):
     resident_id = get_resident_id(resident_name)

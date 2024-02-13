@@ -169,9 +169,12 @@ def add_non_medication_order_window(resident_name):
 
 def perform_non_med_order_window(resident_name, order_name):
     resident_id = db_functions.get_resident_id(resident_name)
+    user_initials = db_functions.get_user_initials(config.global_config['logged_in_user'])
 
     layout = [
+        [sg.Text('Resident Name:'), sg.Text(resident_name)],
         [sg.Text('Order Name:'), sg.Text(order_name)],
+        [sg.Text('Performed By (Initials):'), sg.Text(user_initials)],
         [sg.Text('Notes/Measurements:'), sg.InputText(key='-NON_MED_NOTES-')],
         [sg.Button('Record Completion'), sg.Button('Cancel')]
     ]
@@ -184,7 +187,7 @@ def perform_non_med_order_window(resident_name, order_name):
             break
         elif event == 'Record Completion':
             notes = values['-NON_MED_NOTES-'].strip()
-            db_functions.record_non_med_order_performance(order_name, resident_id, notes)
+            db_functions.record_non_med_order_performance(order_name, resident_id, notes, user_initials)
             sg.popup('Non-medication order performance recorded successfully.')
             break
 
@@ -501,6 +504,43 @@ def filter_active_non_medication_orders(orders):
 
     return active_and_due_orders
 
+
+def open_non_med_order_chart(resident_name, order_id, initial_month=None, initial_year=None):
+    # If no month/year specified, default to current month/year
+    if not initial_month or not initial_year:
+        initial_month, initial_year = datetime.now().strftime('%m'), datetime.now().strftime('%Y')
+
+    def fetch_chart_data(order_id, month, year):
+        return db_functions.fetch_administrations_for_order(order_id, month, year)
+
+    layout = [
+        [sg.Text('Administration Records', font=('Helvetica', 16), justification='center')],
+        [sg.Text('Month:'), sg.InputText(initial_month, size=(4, 1), key='-MONTH-'),
+         sg.Text('Year:'), sg.InputText(initial_year, size=(4, 1), key='-YEAR-'),
+         sg.Button('Refresh', key='-REFRESH-')],
+        # Updated to include the 'Initials' column
+        [sg.Table(values=[], headings=['Date', 'Notes', 'Initials'], key='-CHART-', auto_size_columns=True, display_row_numbers=True)],
+        [sg.Button('Close')]
+    ]
+
+    window = sg.Window(f'Chart for {resident_name}', layout, modal=True, finalize=True)
+
+    # Initial fetch and display
+    chart_data = fetch_chart_data(order_id, initial_month, initial_year)
+    window['-CHART-'].update(values=chart_data)
+
+    while True:
+        event, values = window.read()
+        if event in (sg.WINDOW_CLOSED, 'Close'):
+            break
+        elif event == '-REFRESH-':
+            month, year = values['-MONTH-'], values['-YEAR-']
+            chart_data = fetch_chart_data(order_id, month, year)
+            window['-CHART-'].update(values=chart_data)
+
+    window.close()
+
+
 def open_non_med_orders_window(resident_name):
     # Fetch all non-medication orders for the resident
     non_med_orders = db_functions.fetch_all_non_medication_orders_for_resident(resident_name)
@@ -533,10 +573,48 @@ def open_non_med_orders_window(resident_name):
         if event == sg.WINDOW_CLOSED or event == '-CLOSE-':
             break
         elif event.startswith('-VIEW_CHART_'):
-            order_id = event.split('_')[-1]
-            # Here you would call a function to open the chart for this order_id
-            # This functionality will be implemented later
-            print(f"View chart for order ID: {order_id}")
+            order_id = event.split('_')[-1][:-1]
+            open_non_med_order_chart(resident_name,order_id)
+
+    window.close()
+
+
+def edit_non_med_order_window(selected_resident):
+    resident_id = db_functions.get_resident_id(selected_resident)
+    non_med_orders = db_functions.fetch_all_non_medication_orders_for_resident(selected_resident)
+    non_med_order_list = [order['order_name'] for order in non_med_orders]
+
+    layout = [
+        [sg.Text('Select Order:'), sg.Combo(non_med_order_list, key='-NON_MED_ORDER-', readonly=True)],
+        [sg.Text('New Order Name:'), sg.InputText(key='-NEW_ORDER_NAME-')],
+        [sg.Text('New Special Instructions:'), sg.InputText(key='-NEW_INSTRUCTIONS-')],
+        [sg.Button('Update'), sg.Button('Remove'), sg.Button('Cancel')]
+    ]
+
+    window = sg.Window('Edit Non-Medication Order Details', layout)
+
+    while True:
+        event, values = window.read()
+        if event in (sg.WIN_CLOSED, 'Cancel'):
+            break
+        elif event == 'Update':
+            order_name = values['-NON_MED_ORDER-']
+            new_order_name = values['-NEW_ORDER_NAME-'].strip()
+            new_instructions = values['-NEW_INSTRUCTIONS-'].strip()
+
+            if order_name and (new_order_name or new_instructions):  # Check if user has entered new values
+                # Update non-medication order details
+                db_functions.update_non_med_order_details(order_name, resident_id, new_order_name, new_instructions)
+                sg.popup('Non-medication order details updated')
+            else:
+                sg.popup('Please enter new values to update.')
+            break
+        elif event == 'Remove':
+            # Confirm removal
+            if sg.popup_yes_no('Are you sure you want to remove this non-medication order?') == 'Yes':
+                db_functions.remove_non_med_order(values['-NON_MED_ORDER-'], selected_resident)
+                sg.popup('Non-medication order removed successfully')
+            break
 
     window.close()
 
@@ -562,9 +640,7 @@ def get_emar_tab_layout(resident_name):
     #print(f'non-medication orders:{non_medication_orders}')
     # Filter active and due non-medication orders
     active_and_due_orders = filter_active_non_medication_orders(non_medication_orders)
-    #print(f'active and due:{active_and_due_orders}')
     
-
     # Predefined order of time slots
     time_slot_order = ['Morning', 'Noon', 'Evening', 'Night']
 
@@ -600,7 +676,6 @@ def get_emar_tab_layout(resident_name):
         prn_section_frame = sg.Frame('As Needed (PRN)', prn_section_layout, font=(welcome_screen.FONT_BOLD, 12))
         sections.append([prn_section_frame])
 
-    # print(filtered_medications_data)
     
     # Handle Controlled Medications
     if filtered_medications_data['Controlled']:
@@ -609,8 +684,6 @@ def get_emar_tab_layout(resident_name):
         controlled_section_frame = sg.Frame('Controlled Medications', controlled_section_layout, font=(welcome_screen.FONT_BOLD, 12))
         sections.append([controlled_section_frame])
 
-    
-    
 
     logged_in_user = config.global_config['logged_in_user']
     # Bottom part of the layout with buttons
@@ -620,7 +693,7 @@ def get_emar_tab_layout(resident_name):
          sg.Button('Edit Medication', key='-EDIT_MEDICATION-', font=(welcome_screen.FONT, 11), visible=db_functions.is_admin(config.global_config['logged_in_user'])), sg.Button("Discontinue Medication", key='-DC_MEDICATION-' , font=(welcome_screen.FONT, 11), visible=db_functions.is_admin(config.global_config['logged_in_user'])), 
          sg.Text('', expand_x=True)],
         [sg.Text('', expand_x=True), sg.Button('Add Non-Medication Order', key='-ADD_NON-MEDICATION-', visible=db_functions.is_admin(config.global_config['logged_in_user']), font=(welcome_screen.FONT, 11)), 
-         sg.Button('View Non-Medication Orders', font=(welcome_screen.FONT, 11), key='-NON_MEDICATION_ORDERS-'), sg.Text('', expand_x=True)],
+         sg.Button('Edit Non-Medication Order', key='-EDIT_NON_MEDICATION-', font=(welcome_screen.FONT, 11)), sg.Button('View Non-Medication Orders', font=(welcome_screen.FONT, 11), key='-NON_MEDICATION_ORDERS-'), sg.Text('', expand_x=True)],
         [sg.Text('', expand_x=True), sg.Button('View Current Month eMARS Chart', key='CURRENT_EMAR_CHART', font=(welcome_screen.FONT, 11)), sg.Button('Generate Medication List', key='-MED_LIST-', font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
         [sg.Text('', expand_x=True), sg.Text('Or Search eMARS Chart by Month and Year', font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
         [sg.Text(text="", expand_x=True), sg.Text(text="Enter Month: (MM)", font=(welcome_screen.FONT, 11)), sg.InputText(size=4, key="-EMAR_MONTH-"), sg.Text("Enter Year: (YYYY)", font=(welcome_screen.FONT, 11)), sg.InputText(size=5, key='-EMAR_YEAR-'), sg.Button("Search", key='-EMAR_SEARCH-', font=(welcome_screen.FONT, 11)), sg.Text(text="", expand_x=True)]

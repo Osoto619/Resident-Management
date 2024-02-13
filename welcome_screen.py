@@ -447,7 +447,7 @@ def audit_logs_window():
     layout = [
         [sg.Text('', expand_x=True), sg.Text('Admin Audit Logs', font=(db_functions.get_user_font(), 23)), sg.Text('', expand_x=True)],
         [sg.Text("Filter by Username:"), sg.InputText(key='-USERNAME_FILTER-', size=14)],
-        [sg.Text("Filter by Action:"), sg.Combo(['Login', 'Logout', 'Resident Added', 'User Created', 'New Medication', 'Add Non-Medication Order'], key='-ACTION_FILTER-', readonly=True)],
+        [sg.Text("Filter by Action:"), sg.Combo(['Login', 'Logout', 'Resident Added', 'User Created', 'New Medication', 'Add Non-Medication Order', 'Non-Medication Order Administered'], key='-ACTION_FILTER-', readonly=True)],
         [sg.Text("Filter by Date (YYYY-MM-DD):"), sg.InputText(key='-DATE_FILTER-', enable_events=True, size=10), sg.CalendarButton("Choose Date", target='-DATE_FILTER-', close_when_date_chosen=True, format='%Y-%m-%d')],
         [sg.Button("Apply Filters"), sg.Button("Reset Filters")],
         [sg.Table(headings=['Date', 'Username', 'Action', 'Description'], values=[], key='-AUDIT_LOGS_TABLE-', auto_size_columns=False, display_row_numbers=True, num_rows=20, col_widths=col_widths, enable_click_events=True, select_mode=sg.TABLE_SELECT_MODE_BROWSE)],

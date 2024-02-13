@@ -207,6 +207,10 @@ def main():
             window.close()
             emar_management.add_non_medication_order_window(selected_resident)
             window = create_management_window(resident_names,selected_resident, default_tab_index=1)
+        elif event == '-EDIT_NON_MEDICATION-':
+            window.close()
+            emar_management.edit_non_med_order_window(selected_resident)
+            window = create_management_window(resident_names,selected_resident, default_tab_index=1)
         elif event == '-NON_MEDICATION_ORDERS-':
             window.hide()
             emar_management.open_non_med_orders_window(selected_resident)
