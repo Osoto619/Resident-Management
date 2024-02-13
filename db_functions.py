@@ -9,17 +9,65 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import config
+import sys
+import PySimpleGUI as sg
+import string
+import secrets
+import pyperclip
 
-#passphrase = os.environ.get('RESIDENT_MGMT_DB_KEY').encode()  # Convert to bytes
-# Only attempt to encode if the environment variable is found
+
+def generate_strong_passphrase(length=15):
+    alphabet = string.ascii_letters + string.digits + string.punctuation
+    passphrase = ''.join(secrets.choice(alphabet) for i in range(length))
+    return passphrase
+
+
+# Check if the environment variable exists
 passphrase_env_var = os.environ.get('RESIDENT_MGMT_DB_KEY')
-if passphrase_env_var is not None:
-    passphrase = passphrase_env_var.encode()
+if passphrase_env_var:
+    passphrase = passphrase_env_var.encode()  # Proceed with encoding if exists
 else:
-    # Handle the case where the environment variable is not set
-    print("Warning: 'RESIDENT_MGMT_DB_KEY' environment variable not found.")
-    passphrase = None  # or set a default value, or raise an exception
+    passphrase = generate_strong_passphrase()  # Generate a new passphrase if not found
+
+    detailed_instructions = (
+        f"Passphrase: {passphrase}\n\n"
+        "Setting the Environment Variable\n\n"
+        "For Windows:\n"
+        "1. Open the Start Search, type in 'env', and choose 'Edit the system environment variables'.\n"
+        "2. In the System Properties window, click on the 'Environment Variables…' button.\n"
+        "3. In the Environment Variables window, click 'New…' under the 'System variables' section.\n"
+        "4. Set the variable name as RESIDENT_MGMT_DB_KEY and paste the passphrase in the variable value. Click OK.\n\n"
+        "For macOS and Linux:\n"
+        "1. Open a terminal window.\n"
+        "2. Enter the following command, replacing <passphrase> with the actual passphrase:\n"
+        "   echo 'export RESIDENT_MGMT_DB_KEY=\"<passphrase>\"' >> ~/.bash_profile\n"
+        "3. For the change to take effect, you might need to reload the profile with source ~/.bash_profile or simply restart the terminal."
+    )
+
+    layout = [
+        [sg.Text("Passphrase not found. Please follow the instructions below to set it up.")],
+        [sg.Multiline(detailed_instructions, size=(80, 15), disabled=True)],
+        [sg.Button("Copy Passphrase")]
+    ]
+
+    window = sg.Window("Setup Passphrase", layout)
+
+    while True:
+        event, values = window.read()
+
+        if event == sg.WINDOW_CLOSED:
+            break
+        elif event == "Copy Passphrase":
+            pyperclip.copy(passphrase)
+            sg.popup("Passphrase copied to clipboard. Please follow the instructions to set it as an environment variable.", keep_on_top=True)
+
+    window.close()
+    sys.exit()  # Exit after displaying the instructions
  
+
+if passphrase_env_var == None:
+    sg.popup(detailed_instructions)
+    sys.exit()
 
 salt = b'\x00'*16  # Use a fixed salt; TO BE CHANGED TO BE RANDOM
 
@@ -76,7 +124,6 @@ def log_action(username, action, description):
 
 
 def fetch_audit_logs(last_10_days=False, username='', action='', date=''):
-    # Connect to the SQLite database
     conn = sqlite3.connect('resident_data.db')
     cursor = conn.cursor()
     
@@ -602,6 +649,7 @@ def insert_medication(resident_name, medication_name, dosage, instructions, medi
             
             conn.commit()
 
+
 def remove_medication(medication_name, resident_name):
     resident_id = get_resident_id(resident_name)
     # Connect to the database
@@ -780,6 +828,115 @@ def fetch_discontinued_medications(resident_name):
                 discontinued_medications[decrypted_medication_name] = discontinued_date
 
     return discontinued_medications
+
+
+def save_non_medication_order(resident_id, order_name, frequency, specific_days, special_instructions):
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+        
+        # Prepare the frequency and specific_days values for insertion
+        # If specific_days is not empty, set frequency to None
+        if specific_days:  # Assuming specific_days is a comma-separated string like 'Mon,Wed,Fri'
+            frequency_value = None  # No frequency because specific days are provided
+        else:
+            frequency_value = frequency  # Use the frequency as provided
+            specific_days = None  # No specific days because frequency is used
+
+        # Insert the non-medication order into the database
+        cursor.execute('''
+            INSERT INTO non_medication_orders (resident_id, order_name, frequency, specific_days, special_instructions)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (resident_id, order_name, frequency_value, specific_days, special_instructions))
+
+        conn.commit()
+
+
+def fetch_all_non_medication_orders_for_resident(resident_name):
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+
+        resident_id = get_resident_id(resident_name)
+
+        # Fetch all non-medication orders for the resident ID
+        cursor.execute('''
+            SELECT order_id, order_name, frequency, specific_days, special_instructions,  discontinued_date, last_administered_date
+            FROM non_medication_orders
+            WHERE resident_id = ?
+        ''', (resident_id,))
+        orders = cursor.fetchall()
+
+        # Prepare and return the list of orders
+        non_medication_orders = [{
+            'order_id': order[0],
+            'order_name': order[1],
+            'frequency': order[2],
+            'specific_days': order[3],
+            'special_instructions': order[4],
+           'discontinued_date': order[5],
+           'last_administered_date': order[6]
+           
+        } for order in orders]
+
+    return non_medication_orders
+
+
+def fetch_administrations_for_order(order_id, month, year):
+    # Connect to the SQLite database
+    conn = sqlite3.connect('resident_data.db')
+    cursor = conn.cursor()
+
+    # Update the query to include the initials field
+    query = """
+    SELECT administration_date, notes, initials
+    FROM non_med_order_administrations
+    WHERE order_id = ? AND strftime('%m', administration_date) = ? AND strftime('%Y', administration_date) = ?
+    ORDER BY administration_date ASC
+    """
+
+    # Execute the query
+    cursor.execute(query, (order_id, month.zfill(2), year))
+
+    # Fetch and format the results, now including initials
+    results = cursor.fetchall()
+    formatted_results = [[datetime.strptime(row[0], '%Y-%m-%d').strftime('%b %d, %Y'), row[1], row[2]] for row in results]
+
+    # Close the database connection
+    conn.close()
+
+    return formatted_results
+
+
+def record_non_med_order_performance(order_name, resident_id, notes, user_initials):
+    with sqlite3.connect('resident_data.db') as conn:
+        cursor = conn.cursor()
+
+        # Step 1: Look up the order_id
+        cursor.execute('''
+            SELECT order_id FROM non_medication_orders
+            WHERE order_name = ? AND resident_id = ?
+        ''', (order_name, resident_id))
+        order_result = cursor.fetchone()
+        if not order_result:
+            print("Order not found.")
+            return
+        order_id = order_result[0]
+
+        # Step 2: Insert a new record into the non_med_order_administrations table with initials
+        current_date = datetime.now().strftime('%Y-%m-%d')
+        cursor.execute('''
+            INSERT INTO non_med_order_administrations (order_id, resident_id, administration_date, notes, initials)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (order_id, resident_id, current_date, notes, user_initials))
+
+        # Step 3: Update the last_administered_date for the order
+        cursor.execute('''
+            UPDATE non_medication_orders
+            SET last_administered_date = ?
+            WHERE order_id = ?
+        ''', (current_date, order_id))
+
+        conn.commit()
+        print("Non-medication order performance recorded successfully.")
 
 
 def does_adl_chart_data_exist(resident_name, year_month):

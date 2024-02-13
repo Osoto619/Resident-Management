@@ -99,6 +99,98 @@ def add_medication_window(resident_name):
     window.close()
 
 
+def add_non_medication_order_window(resident_name):
+    resident_id = db_functions.get_resident_id(resident_name)
+    layout = [
+        [sg.Text('Order Name:'), sg.InputText(key='-ORDER_NAME-')],
+        [sg.Text('Special Instructions:'), sg.InputText(key='-INSTRUCTIONS-')],
+        [sg.Frame('Scheduling Options', [
+            [sg.Radio('Set Frequency (in days):', "RADIO1", default=True, key='-FREQ_OPTION-', enable_events=True),
+             sg.InputText(size=(5,1), key='-FREQUENCY-', enable_events=True)],
+            [sg.Radio('Select Specific Days:', "RADIO1", key='-DAYS_OPTION-', enable_events=True),
+             sg.Checkbox('Mon', key='-MON-'), sg.Checkbox('Tue', key='-TUE-'),
+             sg.Checkbox('Wed', key='-WED-'), sg.Checkbox('Thu', key='-THU-'),
+             sg.Checkbox('Fri', key='-FRI-'), sg.Checkbox('Sat', key='-SAT-'),
+             sg.Checkbox('Sun', key='-SUN-')]
+        ])],
+        [sg.Button('Add Order'), sg.Button('Cancel')]
+    ]
+
+    window = sg.Window('Add Non-Medication Order', layout, finalize=True)
+
+    # Initially disable specific days checkboxes
+    for day in ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']:
+        window[f'-{day}-'].update(disabled=True)
+
+    while True:
+        event, values = window.read()
+        if event == sg.WINDOW_CLOSED or event == 'Cancel':
+            break
+        elif event == '-FREQ_OPTION-':
+            # Disable specific days checkboxes and enable frequency input
+            window['-FREQUENCY-'].update(disabled=False)
+            for day in ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']:
+                window[f'-{day}-'].update(disabled=True, value=False)
+        elif event == '-DAYS_OPTION-':
+            # Disable frequency input and enable specific days checkboxes
+            window['-FREQUENCY-'].update(disabled=True, value='')
+            for day in ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']:
+                window[f'-{day}-'].update(disabled=False)
+        elif event == 'Add Order':
+            order_name = values['-ORDER_NAME-'].strip()
+            instructions = values['-INSTRUCTIONS-'].strip()
+            if values['-FREQ_OPTION-']:
+                frequency = values['-FREQUENCY-'].strip()
+                specific_days = ''  # No specific days when frequency is chosen
+                if not frequency.isdigit() or int(frequency) < 1:
+                    sg.popup_error('Please enter a valid positive integer for frequency.')
+                    continue
+            else:
+                frequency = ''  # No frequency when specific days are chosen
+                days_selected = [day for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] if values[f'-{day.upper()}-']]
+                if not days_selected:
+                    sg.popup_error('Please select at least one day.')
+                    continue
+                specific_days = ', '.join(days_selected)
+
+            # Proceed to save the non-medication order
+            if order_name and (frequency or specific_days):
+                db_functions.save_non_medication_order(resident_id, order_name, frequency, specific_days, instructions)
+                sg.popup('Non-medication order added successfully.')
+                # Optionally, log this action in the audit log with a description
+                db_functions.log_action(config.global_config['logged_in_user'], 'Add Non-Medication Order', f'Order for {resident_name}: {order_name}')
+            else:
+                sg.popup_error('Order name, frequency, or specific days are required.')
+
+            break
+
+    window.close()
+
+
+def perform_non_med_order_window(resident_name, order_name):
+    resident_id = db_functions.get_resident_id(resident_name)
+
+    layout = [
+        [sg.Text('Order Name:'), sg.Text(order_name)],
+        [sg.Text('Notes/Measurements:'), sg.InputText(key='-NON_MED_NOTES-')],
+        [sg.Button('Record Completion'), sg.Button('Cancel')]
+    ]
+
+    window = sg.Window(f'Perform Non-Medication Order for {resident_name}', layout)
+
+    while True:
+        event, values = window.read()
+        if event == sg.WINDOW_CLOSED or event == 'Cancel':
+            break
+        elif event == 'Record Completion':
+            notes = values['-NON_MED_NOTES-'].strip()
+            db_functions.record_non_med_order_performance(order_name, resident_id, notes)
+            sg.popup('Non-medication order performance recorded successfully.')
+            break
+
+    window.close()
+
+
 def get_medication_list(medication_data):
     med_list = []
     for category in medication_data:
@@ -308,6 +400,14 @@ def create_medication_entry(medication_name, dosage, instructions, time_slot, ad
     ]
 
 
+def create_non_med_order_entry(order_name, special_instructions):
+    return [
+        sg.Text(text=order_name, size=(23, 1), font=(welcome_screen.FONT, 11)),
+        sg.Text(special_instructions, size=(30, 1), font=(welcome_screen.FONT, 11)),
+        sg.Button('Performed', key=f'-PERFORM_NON_MED_{order_name}-', font=(welcome_screen.FONT, 11))
+    ]
+
+
 def create_time_slot_section(time_slot, medications):
     layout = [create_medication_entry(med_name, med_info['dosage'], med_info['instructions'], time_slot) for med_name, med_info in medications.items()]
     return sg.Frame(time_slot, layout, font=(welcome_screen.FONT, 13))
@@ -364,6 +464,83 @@ def filter_medications_data(all_medications_data, active_medications):
     return filtered_data
 
 
+def order_due_today(order):
+    today = datetime.now().date()
+
+    # Check based on frequency
+    if order['frequency']:
+        if order['last_administered_date'] is None:
+            # If there's no last administered date, the order is due today for the first time
+            return True
+        else:
+            last_administered_date = datetime.strptime(order['last_administered_date'], '%Y-%m-%d').date()
+            days_since_last_administered = (today - last_administered_date).days
+            # Check if the days since last administered is equal or greater than the frequency
+            if days_since_last_administered >= int(order['frequency']):
+                return True
+
+    # Check based on specific days
+    if order['specific_days']:
+        specific_days = order['specific_days'].split(', ')
+        current_weekday = today.strftime('%a')
+        if current_weekday in specific_days:
+            return True
+
+    return False
+
+
+def filter_active_non_medication_orders(orders):
+    active_and_due_orders = []
+
+    for order in orders:
+        # Check if the order is not discontinued or discontinued in the future
+        if order['discontinued_date'] is None or datetime.strptime(order['discontinued_date'], '%Y-%m-%d').date() > datetime.now().date():
+            # Check if today matches the order's frequency or specific day
+            if order_due_today(order):
+                active_and_due_orders.append(order)
+
+    return active_and_due_orders
+
+def open_non_med_orders_window(resident_name):
+    # Fetch all non-medication orders for the resident
+    non_med_orders = db_functions.fetch_all_non_medication_orders_for_resident(resident_name)
+
+    # Define the layout for displaying orders
+    layout = []
+
+    # Add a title or header to the window
+    layout.append([sg.Text(f'Non-Medication Orders for {resident_name}', font=('Helvetica', 16), justification='center')])
+
+    # If there are no orders, display a message instead
+    if not non_med_orders:
+        layout.append([sg.Text("No non-medication orders found for this resident.")])
+    else:
+        # Iterate through each non-medication order and add it to the layout
+        for order in non_med_orders:
+            order_details = f"Order Name: {order['order_name']}, Frequency: {order['frequency'] if order['frequency'] else 'N/A'}, Specific Days: {order['specific_days'] if order['specific_days'] else 'N/A'}, Special Instructions: {order['special_instructions']}"
+            layout.append([sg.Text(order_details, size=(50, 2))])
+            layout.append([sg.Button('View Chart', key=f'-VIEW_CHART_{order["order_id"]}-')])
+
+    # Add a Close button at the bottom
+    layout.append([sg.Button('Close', key='-CLOSE-')])
+
+    # Create the window
+    window = sg.Window(f'Non-Medication Orders for {resident_name}', layout, modal=True)
+
+    # Event loop
+    while True:
+        event, values = window.read()
+        if event == sg.WINDOW_CLOSED or event == '-CLOSE-':
+            break
+        elif event.startswith('-VIEW_CHART_'):
+            order_id = event.split('_')[-1]
+            # Here you would call a function to open the chart for this order_id
+            # This functionality will be implemented later
+            print(f"View chart for order ID: {order_id}")
+
+    window.close()
+
+
 def get_emar_tab_layout(resident_name):
     # Fetch medications for the resident, including both scheduled and PRN
     all_medications_data = db_functions.fetch_medications_for_resident(resident_name)
@@ -374,16 +551,19 @@ def get_emar_tab_layout(resident_name):
     all_meds = list(set(scheduled_meds + prn_meds + controlled_meds))
     # Filter out discontinued medications
     active_medications = db_functions.filter_active_medications(all_meds, resident_name)
-    # print('testing active medications')
-    # print(active_medications)
-    # Filter the medications data
+    
     filtered_medications_data = filter_medications_data(all_medications_data, active_medications)
-    # print(filtered_medications_data)
-    # print('--------------------------------------')
-    # print(all_medications_data)
-
+    
     existing_emar_data = db_functions.fetch_emar_data_for_resident(resident_name)
     all_administered = True
+
+    # Fetch non-medication orders for the resident
+    non_medication_orders = db_functions.fetch_all_non_medication_orders_for_resident(resident_name)
+    #print(f'non-medication orders:{non_medication_orders}')
+    # Filter active and due non-medication orders
+    active_and_due_orders = filter_active_non_medication_orders(non_medication_orders)
+    #print(f'active and due:{active_and_due_orders}')
+    
 
     # Predefined order of time slots
     time_slot_order = ['Morning', 'Noon', 'Evening', 'Night']
@@ -406,6 +586,13 @@ def get_emar_tab_layout(resident_name):
             section_frame = sg.Frame(time_slot, time_slot_groups[time_slot], font=(welcome_screen.FONT_BOLD, 12))
             sections.append([section_frame])
 
+    # Handle Non-Medication Orders Due Today
+    if active_and_due_orders:
+        non_med_section_layout = [create_non_med_order_entry(order['order_name'], order['special_instructions']) 
+                                for order in active_and_due_orders]
+        non_med_section_frame = sg.Frame('Non-Medication Orders Due Today', non_med_section_layout, font=(welcome_screen.FONT_BOLD, 12), title_color='red')
+        sections.append([non_med_section_frame])
+
     # Handle PRN Medications
     if filtered_medications_data['PRN']:
         prn_section_layout = [create_prn_medication_entry(med_name, med_info['dosage'], med_info['instructions']) 
@@ -422,6 +609,9 @@ def get_emar_tab_layout(resident_name):
         controlled_section_frame = sg.Frame('Controlled Medications', controlled_section_layout, font=(welcome_screen.FONT_BOLD, 12))
         sections.append([controlled_section_frame])
 
+    
+    
+
     logged_in_user = config.global_config['logged_in_user']
     # Bottom part of the layout with buttons
     bottom_layout = [
@@ -429,11 +619,12 @@ def get_emar_tab_layout(resident_name):
          sg.Button('Add Medication', key='-ADD_MEDICATION-', font=(welcome_screen.FONT, 11), visible=db_functions.is_admin(logged_in_user)), 
          sg.Button('Edit Medication', key='-EDIT_MEDICATION-', font=(welcome_screen.FONT, 11), visible=db_functions.is_admin(config.global_config['logged_in_user'])), sg.Button("Discontinue Medication", key='-DC_MEDICATION-' , font=(welcome_screen.FONT, 11), visible=db_functions.is_admin(config.global_config['logged_in_user'])), 
          sg.Text('', expand_x=True)],
+        [sg.Text('', expand_x=True), sg.Button('Add Non-Medication Order', key='-ADD_NON-MEDICATION-', visible=db_functions.is_admin(config.global_config['logged_in_user']), font=(welcome_screen.FONT, 11)), 
+         sg.Button('View Non-Medication Orders', font=(welcome_screen.FONT, 11), key='-NON_MEDICATION_ORDERS-'), sg.Text('', expand_x=True)],
         [sg.Text('', expand_x=True), sg.Button('View Current Month eMARS Chart', key='CURRENT_EMAR_CHART', font=(welcome_screen.FONT, 11)), sg.Button('Generate Medication List', key='-MED_LIST-', font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
-        [sg.Text('', expand_x=True), sg.Text('Or Search by Month and Year', font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
+        [sg.Text('', expand_x=True), sg.Text('Or Search eMARS Chart by Month and Year', font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
         [sg.Text(text="", expand_x=True), sg.Text(text="Enter Month: (MM)", font=(welcome_screen.FONT, 11)), sg.InputText(size=4, key="-EMAR_MONTH-"), sg.Text("Enter Year: (YYYY)", font=(welcome_screen.FONT, 11)), sg.InputText(size=5, key='-EMAR_YEAR-'), sg.Button("Search", key='-EMAR_SEARCH-', font=(welcome_screen.FONT, 11)), sg.Text(text="", expand_x=True)]
     ]
-
 
     combined_layout = sections + bottom_layout
     #print(combined_layout)
@@ -445,18 +636,18 @@ def get_emar_tab_layout(resident_name):
     return [[scrollable_layout]]
 
 
-if __name__ == "__main__":
-    # Create the eMAR tab layout for a specific resident
-    eMAR_tab_layout = get_emar_tab_layout("Resident Name")
-    eMAR_tab = sg.Tab('eMAR Management', eMAR_tab_layout)  # Create the eMAR tab with the layout
+# if __name__ == "__main__":
+#     # Create the eMAR tab layout for a specific resident
+#     eMAR_tab_layout = get_emar_tab_layout("Resident Name")
+#     eMAR_tab = sg.Tab('eMAR Management', eMAR_tab_layout)  # Create the eMAR tab with the layout
 
-    # Create the window with the eMAR tab
-    window = sg.Window('Resident Management', [[sg.TabGroup([[eMAR_tab]])]], finalize=True)
+#     # Create the window with the eMAR tab
+#     window = sg.Window('Resident Management', [[sg.TabGroup([[eMAR_tab]])]], finalize=True)
 
-    # Event Loop
-    while True:
-        event, values = window.read()
-        if event == sg.WIN_CLOSED:
-            break
+#     # Event Loop
+#     while True:
+#         event, values = window.read()
+#         if event == sg.WIN_CLOSED:
+#             break
 
-    window.close()
+#     window.close()

@@ -253,29 +253,7 @@ def enter_resident_edit():
     window.close()
 
 
-def generate_strong_passphrase(length=15):
-    alphabet = string.ascii_letters + string.digits + string.punctuation
-    passphrase = ''.join(secrets.choice(alphabet) for i in range(length))
-    return passphrase
-
-
 def create_initial_admin_account_window():
-    passphrase = generate_strong_passphrase()
-
-    # Detailed instructions for setting environment variables
-    detailed_instructions = (
-        "Setting the Environment Variable\n\n"
-        "For Windows:\n"
-        "1. Open the Start Search, type in 'env', and choose 'Edit the system environment variables'.\n"
-        "2. In the System Properties window, click on the 'Environment Variables…' button.\n"
-        "3. In the Environment Variables window, click 'New…' under the 'System variables' section.\n"
-        "4. Set the variable name as RESIDENT_MGMT_DB_KEY and paste the passphrase in the variable value. Click OK.\n\n"
-        "For macOS and Linux:\n"
-        "1. Open a terminal window.\n"
-        "2. Enter the following command, replacing <passphrase> with the actual passphrase:\n"
-        "   echo 'export RESIDENT_MGMT_DB_KEY=\"<passphrase>\"' >> ~/.bash_profile\n"
-        "3. For the change to take effect, you might need to reload the profile with source ~/.bash_profile or simply restart the terminal."
-    )
 
     layout = [
         [sg.Text('', expand_x=True), sg.Text("Welcome to CareTech Resident Management", font=(db_functions.get_user_font(), 18)), sg.Text('', expand_x=True)],
@@ -283,10 +261,7 @@ def create_initial_admin_account_window():
         [sg.Text('', expand_x=True), sg.Text("Username:", font=(db_functions.get_user_font(), 14)), sg.InputText(key='username', size=16, font=(db_functions.get_user_font(), 14)), sg.Text('', expand_x=True)],
         [sg.Text('', expand_x=True), sg.Text("Password:", font=(db_functions.get_user_font(), 16)), sg.InputText(key='password', password_char='*', size=16, font=(db_functions.get_user_font(), 14)), sg.Text('', expand_x=True)],
         [sg.Text('', expand_x=True), sg.Text("Initials:", font=(db_functions.get_user_font(), 16)), sg.InputText(key='initials', size=4, font=(db_functions.get_user_font(), 14)), sg.Text('', expand_x=True)],
-        [sg.Text("Database Passphrase (IMPORTANT - SAVE THIS!):", font=(db_functions.get_user_font(), 16)), sg.InputText(default_text=passphrase, size=15, readonly=True, font=(db_functions.get_user_font(), 14))],
-        [sg.Text("Copy the above passphrase and follow the detailed instructions below to set it as an environment variable on your system.", font=(db_functions.get_user_font(), 12))],
-        [sg.Text('', expand_x=True), sg.Multiline(default_text=detailed_instructions, size=(60, 20), font=(db_functions.get_user_font(), 10), no_scrollbar=True, disabled=True), sg.Text('', expand_x=True)],
-        [sg.Text('', expand_x=True), sg.Button("Copy Passphrase", font=(db_functions.get_user_font(), 12)), sg.Button("Create Admin Account", font=(db_functions.get_user_font(), 12)), sg.Button("Exit", font=(db_functions.get_user_font(), 12)), sg.Text('', expand_x=True)]
+        [sg.Text('', expand_x=True), sg.Button("Create Admin Account", font=(db_functions.get_user_font(), 12)), sg.Button("Exit", font=(db_functions.get_user_font(), 12)), sg.Text('', expand_x=True)]
     ]
 
     window = sg.Window("Admin Account Setup", layout)
@@ -295,10 +270,6 @@ def create_initial_admin_account_window():
         event, values = window.read()
         if event == sg.WIN_CLOSED or event == "Exit":
             sys.exit(0)
-        elif event == "Copy Passphrase":
-            # Copy passphrase to clipboard
-            pyperclip.copy(passphrase)
-            sg.popup("Passphrase copied to clipboard. Please save it securely and follow the instructions to set it as an environment variable.", title="Passphrase Copied")
         elif event == "Create Admin Account":
             username = values['username']
             password = values['password']
@@ -476,7 +447,7 @@ def audit_logs_window():
     layout = [
         [sg.Text('', expand_x=True), sg.Text('Admin Audit Logs', font=(db_functions.get_user_font(), 23)), sg.Text('', expand_x=True)],
         [sg.Text("Filter by Username:"), sg.InputText(key='-USERNAME_FILTER-', size=14)],
-        [sg.Text("Filter by Action:"), sg.Combo(['Login', 'Logout', 'Resident Added', 'User Created', 'New Medication'], key='-ACTION_FILTER-', readonly=True)],
+        [sg.Text("Filter by Action:"), sg.Combo(['Login', 'Logout', 'Resident Added', 'User Created', 'New Medication', 'Add Non-Medication Order'], key='-ACTION_FILTER-', readonly=True)],
         [sg.Text("Filter by Date (YYYY-MM-DD):"), sg.InputText(key='-DATE_FILTER-', enable_events=True, size=10), sg.CalendarButton("Choose Date", target='-DATE_FILTER-', close_when_date_chosen=True, format='%Y-%m-%d')],
         [sg.Button("Apply Filters"), sg.Button("Reset Filters")],
         [sg.Table(headings=['Date', 'Username', 'Action', 'Description'], values=[], key='-AUDIT_LOGS_TABLE-', auto_size_columns=False, display_row_numbers=True, num_rows=20, col_widths=col_widths, enable_click_events=True, select_mode=sg.TABLE_SELECT_MODE_BROWSE)],

@@ -203,18 +203,28 @@ def main():
             window.close()
             edit_med_win = emar_management.edit_medication_window(selected_resident)
             window = create_management_window(resident_names,selected_resident, default_tab_index=1)
+        elif event == '-ADD_NON-MEDICATION-':
+            window.close()
+            emar_management.add_non_medication_order_window(selected_resident)
+            window = create_management_window(resident_names,selected_resident, default_tab_index=1)
+        elif event == '-NON_MEDICATION_ORDERS-':
+            window.hide()
+            emar_management.open_non_med_orders_window(selected_resident)
+            window.un_hide()
         elif event.startswith('-ADMIN_'):
-            # print(event)
             med_type = event.split('_')[1]
-            # print(med_type)
-            medication_name = event.split('_')[-1]
-            medication_name = medication_name[:-1]
-            # print(medication_name)
+            medication_name = event.split('_')[-1][:-1]  # Remove the last character which is a '-'
             if med_type == 'PRN':
                 emar_management.prn_administer_window(selected_resident, medication_name)
             elif med_type == 'CONTROLLED':
                 count, form = db_functions.get_controlled_medication_count_and_form(selected_resident, medication_name)
                 emar_management.controlled_administer_window(selected_resident,medication_name, count, form)
+        elif event.startswith('-PERFORM_NON_MED_'):
+            order_name = event.split('_')[-1][:-1]  # Remove the last character which is a '-'
+            window.close()
+            emar_management.perform_non_med_order_window(selected_resident,order_name)
+            window = create_management_window(resident_names,selected_resident, default_tab_index=1)
+
         elif event == '-INFO_WINDOW-':
             window.hide()
             info_management.open_resident_info_window(selected_resident)

@@ -75,7 +75,19 @@ def initialize_database():
         FOREIGN KEY(time_slot_id) REFERENCES time_slots(id),
         PRIMARY KEY (medication_id, time_slot_id))''')
 
-    # Create table for eMARS charts
+    # Create Non-Medication Orders Table
+    c.execute('''CREATE TABLE IF NOT EXISTS non_medication_orders (
+        order_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        resident_id INTEGER,
+        order_name TEXT NOT NULL,
+        frequency INTEGER,
+        specific_days TEXT,
+        special_instructions TEXT,
+        discontinued_date DATE DEFAULT NULL,
+        last_administered_date DATE DEFAULT NULL,
+        FOREIGN KEY(resident_id) REFERENCES residents(id))''')
+
+    # Create eMARS Chart Table
     c.execute('''CREATE TABLE IF NOT EXISTS emar_chart (
         chart_id INTEGER PRIMARY KEY AUTOINCREMENT,
         resident_id INTEGER,
@@ -89,7 +101,17 @@ def initialize_database():
         FOREIGN KEY(medication_id) REFERENCES medications(id),
         UNIQUE(resident_id, medication_id, date, time_slot))''')
 
-        # Create table for ADL charts
+    # Create Non-Medication Administrations Table
+    c.execute('''CREATE TABLE IF NOT EXISTS non_med_order_administrations (
+                administration_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id INTEGER,
+                resident_id INTEGER,
+                administration_date DATE,
+                notes TEXT DEFAULT '',
+                FOREIGN KEY(order_id) REFERENCES non_medication_orders(order_id),
+                FOREIGN KEY(resident_id) REFERENCES residents(id))''')
+    
+    # Create table for ADL charts
     c.execute('''CREATE TABLE IF NOT EXISTS adl_chart (
                 chart_id INTEGER PRIMARY KEY,
                 resident_id INTEGER,
