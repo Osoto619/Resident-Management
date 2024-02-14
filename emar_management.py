@@ -207,10 +207,8 @@ def get_medication_list(medication_data):
 
 def edit_medication_window(selected_resident):
     resident_id = db_functions.get_resident_id(selected_resident)
-    medication_names = db_functions.fetch_medications_for_resident(selected_resident)['Scheduled']  # Assuming this returns a dict with 'Scheduled' medications
-    med_list = [med_name for timeslot, meds in medication_names.items() for med_name in meds]  # Adjust based on your structure
-    unique_med_list = set(med_list)
-    med_list = list(unique_med_list)
+    med_data = db_functions.fetch_medications_for_resident(selected_resident)
+    med_list = get_medication_list(med_data)
     layout = [
         [sg.Text('Select Medication:'), sg.Combo(med_list, key='-MEDICATION-', readonly=True)],
         [sg.Text('New Medication Name:'), sg.InputText(key='-NEW_MED_NAME-')],
@@ -319,6 +317,7 @@ def controlled_administer_window(resident_name, medication_name, med_count, med_
     current_date = datetime.now().strftime("%Y-%m-%d")
     current_hour = datetime.now().hour
     current_minute = datetime.now().minute
+    user_initials = db_functions.get_user_initials(config.global_config['logged_in_user'])
 
     # Create layout based on medication form
     if med_form == 'Pill':
@@ -331,7 +330,7 @@ def controlled_administer_window(resident_name, medication_name, med_count, med_
         [sg.Text("Date:"), sg.InputText(current_date, key='-DATE-', size=(10, 1)), 
          sg.Text("Time:"), sg.Spin(values=[i for i in range(0, 24)], initial_value=current_hour, key='-HOUR-', size=(2, 1)),
          sg.Text(":"), sg.Spin(values=[i for i in range(0, 60)], initial_value=current_minute, key='-MINUTE-', size=(2, 1))],
-        [sg.Text("Administered By (Initials):", size=(20, 1)), sg.InputText(key='-INITIALS-', size=(20, 1))],
+        [sg.Text("Administered By (Initials):", size=(20, 1)), sg.InputText(key='-INITIALS-', size=(20, 1), default_text=user_initials, readonly=True)],
         [sg.Text("Notes:", size=(20, 1)), sg.InputText(key='-NOTES-', size=(20, 1))],
         count_layout,  # Include count input based on medication form
         [sg.Button("Submit"), sg.Button("Cancel")]
@@ -349,10 +348,13 @@ def controlled_administer_window(resident_name, medication_name, med_count, med_
                 sg.popup('Please enter your initials to proceed')
                 continue
 
-            # Validate the administered count
+            # Validate the administered count for both integer and float values
             try:
-                administered_count = int(values['-ADMINISTERED_COUNT-'])
-                if administered_count <= 0 or administered_count > med_count:
+                if med_form == 'Pill':
+                    administered_count = int(values['-ADMINISTERED_COUNT-'])
+                elif med_form == 'Liquid':
+                    administered_count = float(values['-ADMINISTERED_COUNT-'])
+                if administered_count > med_count or administered_count < 0:
                     raise ValueError
             except ValueError:
                 sg.popup('Invalid count. Please enter a valid number.')

@@ -1410,12 +1410,7 @@ def fetch_monthly_medication_data(resident_name, medication_name, year_month, me
     with sqlite3.connect('resident_data.db') as conn:
         cursor = conn.cursor()
 
-        # Fetch resident ID
-        cursor.execute("SELECT id FROM residents WHERE name = ?", (resident_name,))
-        resident_id_result = cursor.fetchone()
-        if not resident_id_result:
-            return []  # Resident not found
-        resident_id = resident_id_result[0]
+        resident_id = get_resident_id(resident_name)
 
         # Fetch medication ID
         cursor.execute("SELECT id FROM medications WHERE medication_name = ? AND resident_id = ?", (medication_name, resident_id))
@@ -1429,10 +1424,10 @@ def fetch_monthly_medication_data(resident_name, medication_name, year_month, me
         start_date = f"{year}-{month}-01"
         end_date = f"{year}-{month}-{calendar.monthrange(int(year), int(month))[1]}"
 
-        if medication_type == 'Controlled':
+        if medication_type == 'Control':
             # For Controlled medications, include count information
             cursor.execute('''
-                SELECT date, administered, notes, count
+                SELECT date, administered, notes, current_count
                 FROM emar_chart
                 WHERE resident_id = ? AND medication_id = ? AND date BETWEEN ? AND ?
                 ORDER BY date

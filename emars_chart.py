@@ -148,9 +148,9 @@ def is_after_discontinuation(year_month, discontinue_date):
 
 def create_monthly_details_window(resident_name, medication_name, year_month, medication_type):
     monthly_data = db_functions.fetch_monthly_medication_data(resident_name, medication_name, year_month, medication_type)
-
+    
     # Define table headers based on medication type
-    if medication_type == 'Controlled':
+    if medication_type == 'Control':
         headers = ["Date Administered", "Administered By", "Notes", "Count After Administration"]
     else:  # PRN medication
         headers = ["Date Administered", "Administered By", "Notes"]
