@@ -1,6 +1,7 @@
 import PySimpleGUI as sg
 import calendar
 import db_functions
+import pdf
 
 
 # Define the width of the label cell and regular cells
@@ -145,7 +146,7 @@ def show_adl_chart(resident_name, year_month):
         create_input_text("snack_pm"),
         create_row_label("WATER IN-TAKE") +
         create_input_text("water_intake"),
-        [sg.Text(text='', expand_x=True), [sg.Button('Save Changes Made'), sg.Button('Hide Buttons')], activities_frame, sg.Text(text='', expand_x=True)]
+        [sg.Text(text='', expand_x=True), [sg.Button('Save Changes Made'), sg.Button('Generate PDF'), sg.Button('Hide Buttons')], activities_frame, sg.Text(text='', expand_x=True)]
     ]
 
     # Create the window
@@ -176,6 +177,8 @@ def show_adl_chart(resident_name, year_month):
         elif event == 'Save Changes Made':
             db_functions.save_adl_data_from_chart_window(resident_name,year_month, values)
             sg.popup("Changes Have Been Saved")
+        elif event == 'Generate PDF':
+            pdf.generate_adl_chart_pdf(resident_name, year_month, adl_data)
 
     window.close()
 

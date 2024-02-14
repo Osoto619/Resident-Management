@@ -8,7 +8,7 @@ from adl_chart import show_adl_chart
 from emars_chart import show_emar_chart
 import welcome_screen
 import config
-import med_lists
+import pdf
 
 
 def create_tab_layout(resident_name):
@@ -171,7 +171,7 @@ def main():
             window.un_hide()
         elif event == '-MED_LIST-':
             medication_data = db_functions.fetch_medications_for_resident(selected_resident)
-            med_lists.create_medication_list_pdf(selected_resident, medication_data)
+            pdf.create_medication_list_pdf(selected_resident, medication_data)
         elif event == '-ADL_SEARCH-':
             # year_month should be in the format 'YYYY-MM'
             month = values['-ADL_MONTH-'].zfill(2)
