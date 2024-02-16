@@ -697,7 +697,7 @@ def get_emar_tab_layout(resident_name):
         [sg.Text('', expand_x=True), sg.Button('Add Non-Medication Order', key='-ADD_NON-MEDICATION-', visible=db_functions.is_admin(config.global_config['logged_in_user']), font=(welcome_screen.FONT, 11)), 
          sg.Button('Edit Non-Medication Order', key='-EDIT_NON_MEDICATION-', font=(welcome_screen.FONT, 11)), sg.Button('View Non-Medication Orders', font=(welcome_screen.FONT, 11), key='-NON_MEDICATION_ORDERS-'), sg.Text('', expand_x=True)],
         [sg.Text('', expand_x=True), sg.Button('View Current Month eMARS Chart', key='CURRENT_EMAR_CHART', font=(welcome_screen.FONT, 11)), sg.Button('Generate Medication List', key='-MED_LIST-', font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
-        [sg.Text('', expand_x=True), sg.Text('Or Search eMARS Chart by Month and Year', font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
+        [sg.Text('', expand_x=True), sg.Text('Search eMARS Chart by Month and Year', font=(welcome_screen.FONT, 11)), sg.Text('', expand_x=True)],
         [sg.Text(text="", expand_x=True), sg.Text(text="Enter Month: (MM)", font=(welcome_screen.FONT, 11)), sg.InputText(size=4, key="-EMAR_MONTH-"), sg.Text("Enter Year: (YYYY)", font=(welcome_screen.FONT, 11)), sg.InputText(size=5, key='-EMAR_YEAR-'), sg.Button("Search", key='-EMAR_SEARCH-', font=(welcome_screen.FONT, 11)), sg.Text(text="", expand_x=True)]
     ]
 

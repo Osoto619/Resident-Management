@@ -404,10 +404,10 @@ def remove_user_window():
 def login_window():
     
     layout = [
-        [sg.Text("CareTech Resident Manager", font=(db_functions.get_user_font(), 15))],
-        [sg.Text("Username:", font=(db_functions.get_user_font(), 15)), sg.InputText(key='username', size=14, font=(db_functions.get_user_font(),15))],
-        [sg.Text("Password:", font=(db_functions.get_user_font(),15)), sg.InputText(key='password', password_char='*', size=14, font=(db_functions.get_user_font(),15))],
-        [sg.Button("Login",size=14, font=(db_functions.get_user_font(),12)), sg.Button("Exit", size=14, font=(db_functions.get_user_font(),12))]
+        [sg.Text("CareTech Resident Management", font=(db_functions.get_user_font(), 15), pad=10)],
+        [sg.Text("Username:", font=(db_functions.get_user_font(), 15), size=9, pad=(0,12)), sg.InputText(key='username', size=14, font=(db_functions.get_user_font(),15))],
+        [sg.Text("Password:", font=(db_functions.get_user_font(),15), size=9, pad=(0,12)), sg.InputText(key='password', password_char='*', size=14, font=(db_functions.get_user_font(),15))],
+        [sg.Text('', expand_x=True), sg.Button(key='Login',size=14, image_filename='login.png', pad=(15)), sg.Button(key= 'Exit',size=14, image_filename='exit.png', pad=(15)), sg.Text('', expand_x=True)]
     ]
  
     window = sg.Window("Login", layout)
@@ -512,13 +512,13 @@ def display_welcome_window(num_of_residents_local, show_login=False):
     admin_panel = sg.Frame('Admin Panel', admin_panel_layout, font=(FONT, 14), visible=db_functions.is_admin(config.global_config['logged_in_user']))
 
     layout = [
-        [sg.Text(f'CareTech Resident Manager', font=(db_functions.get_user_font(), 20),
+        [sg.Text(f'CareTech Resident Management', font=(db_functions.get_user_font(), 20),
                  justification='center', pad=(20,20))],
         [sg.Image(image_path)],
         [sg.Text(f'Your Facility Currently has {num_of_residents_local} Resident(s)',
                  font=(FONT, 16), justification='center', pad=(10,10))],
-        [sg.Text(text='', expand_x=True), sg.Button('Enter Resident Management', pad=6, font=(FONT, 12)),
-          sg.Button("Change Theme", pad=6, font=(FONT, 12)), sg.Text(text='', expand_x=True)],
+        [sg.Text(text='', expand_x=True), sg.Button(key='Enter Resident Management', pad=((30,30),(10,10)), image_filename='enter.png'),
+          sg.Button(key="Change Theme", pad=((30,30),(10,10)), image_filename='style.png'), sg.Text(text='', expand_x=True)],
           [admin_panel]
     ]
 

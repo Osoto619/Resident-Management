@@ -14,13 +14,13 @@ import pdf
 def create_tab_layout(resident_name):
     adl_tab_layout = adl_management.get_adl_tab_layout(resident_name)
     emar_tab_layout = emar_management.get_emar_tab_layout(resident_name)
-    resident_info_layout = [[sg.Button(button_text='Enter Resident Info Window', key='-INFO_WINDOW-')]]
+    # resident_info_layout = [[sg.Button(button_text='Enter Resident Info Window', key='-INFO_WINDOW-')]]
 
     adl_tab = sg.Tab('ADL', adl_tab_layout)
     emar_tab = sg.Tab('eMAR', emar_tab_layout)
-    resident_info_tab = sg.Tab('Resident Info', resident_info_layout)
+    # resident_info_tab = sg.Tab('Resident Info', resident_info_layout)
 
-    return [adl_tab, emar_tab, resident_info_tab]
+    return [adl_tab, emar_tab]
 
 
 def create_management_window(resident_names, selected_resident, default_tab_index=0):
